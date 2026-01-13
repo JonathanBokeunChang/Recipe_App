@@ -2,6 +2,17 @@ import fs from 'node:fs/promises';
 import OpenAI from 'openai';
 import './env.js';
 
+/**
+ * Generate a normalized recipe object inferred from a video URL and its associated signals.
+ *
+ * Builds a prompt from the provided video URL, transcript, OCR text, and selected frame images, calls the configured LLM to extract recipe data, parses and normalizes the LLM output, and returns a consistent recipe structure. If the LLM call or parsing fails, returns a heuristic offline fallback recipe constructed from the available signals.
+ *
+ * @param {Object} params - Input parameters.
+ * @param {string} params.url - Source video URL used as the primary context for recipe inference.
+ * @param {string} [params.transcript] - Full or partial transcript of the video's audio; may be truncated before sending to the model.
+ * @param {string} [params.ocrText] - Extracted OCR text from the video frames; may be truncated before sending to the model.
+ * @param {string[]} [params.frames] - File paths to selected frame images; readable frames will be base64-encoded and included for the model.
+ * @returns {Object} A normalized recipe object containing at least: `title`, `servings`, `ingredients`, `steps`, `times`, `macros`, `assumptions`, `confidence`, and `transcriptSnippet`.
 export async function generateRecipeFromVideo({ url, transcript, ocrText = '', frames = [] }) {
   const config = getLlmConfig();
   const content = await buildContent({ url, transcript, ocrText, frames });
@@ -41,6 +52,12 @@ export async function generateRecipeFromVideo({ url, transcript, ocrText = '', f
   }
 }
 
+/**
+ * Create an OpenAI client using the OPENAI_API_KEY environment variable.
+ *
+ * @returns {OpenAI} An OpenAI client instance configured with the environment API key.
+ * @throws {Error} If `OPENAI_API_KEY` is not set in the environment.
+ */
 function createClient() {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -49,6 +66,20 @@ function createClient() {
   return new OpenAI({ apiKey });
 }
 
+/**
+ * Assemble a sequence of content parts (text and image blocks) to send to the LLM for recipe inference.
+ *
+ * The returned parts always include the source video URL and an instruction block; if provided, a truncated
+ * transcript and truncated OCR/on-screen text are appended. Any readable frame paths are converted into
+ * encoded image blocks and appended as ordered frame headers followed by image_url parts.
+ *
+ * @param {Object} params - Input values used to build the content payload.
+ * @param {string} params.url - Source video URL to include as context.
+ * @param {string} [params.transcript] - Full transcript text; will be truncated to the configured max transcript length when included.
+ * @param {string} [params.ocrText] - OCR / on-screen text; will be truncated to the configured max OCR length when included.
+ * @param {string[]} [params.frames] - File paths to frame images; readable frames are encoded and added as image parts.
+ * @returns {Array<Object>} An array of content parts where each part is either a text block (type: 'text') or an image block (type: 'image_url' with an `image_url` object containing `url` and `detail`).
+ */
 async function buildContent({ url, transcript, ocrText, frames }) {
   const { maxTranscriptChars, maxOcrChars } = getLlmConfig();
   const parts = [
@@ -90,6 +121,12 @@ async function buildContent({ url, transcript, ocrText, frames }) {
   return parts;
 }
 
+/**
+ * Convert a list of image file paths into base64-encoded JPEG data URLs, limited by the configured maximum.
+ *
+ * Reads the provided frame file paths, encodes readable images as `data:image/jpeg;base64,...`, and skips any files that cannot be read. The number of returned frames is constrained by the LLM configuration's maxFrameImages setting and preserves the selection order.
+ * @param {string[]} framePaths - Local file paths to frame images.
+ * @returns {Promise<string[]>} An array of JPEG data URL strings for the successfully read and selected frames.
 async function encodeFrames(framePaths) {
   if (!framePaths?.length) return [];
   const { maxFrameImages } = getLlmConfig();
@@ -107,6 +144,13 @@ async function encodeFrames(framePaths) {
   return encoded;
 }
 
+/**
+ * Selects up to `maxCount` file paths evenly sampled from the provided list.
+ *
+ * @param {string[]} paths - Ordered list of file paths to sample from.
+ * @param {number} maxCount - Maximum number of paths to return; if falsy or greater than or equal to `paths.length`, the original `paths` array is returned.
+ * @returns {string[]} An array of sampled paths (at most `maxCount`), evenly spaced from the input. Duplicate entries are removed while preserving the first occurrence order.
+ */
 function selectFrames(paths, maxCount) {
   if (!maxCount || paths.length <= maxCount) return paths;
   const selected = [];
@@ -118,6 +162,25 @@ function selectFrames(paths, maxCount) {
   return Array.from(new Set(selected));
 }
 
+/**
+ * Normalize a parsed recipe into the module's canonical recipe shape and attach input usage metadata.
+ *
+ * @param {Object} recipe - Recipe object (typically parsed from the LLM) whose properties may be missing or partial.
+ * @param {Object} options - Context about the inputs used to generate the recipe.
+ * @param {string} [options.transcript] - Source transcript text; used to populate `transcriptSnippet` and `confidence.transcriptUsed`.
+ * @param {string} [options.ocrText] - OCR-extracted text; used to set `confidence.ocrUsed`.
+ * @param {string[]} [options.frames] - Array of frame paths or data; length is used to set `confidence.framesUsed`.
+ * @returns {Object} A normalized recipe object containing:
+ *   - title: recipe title or `'Generated Recipe'`.
+ *   - servings: number of servings or `2`.
+ *   - ingredients: array of ingredient entries (defaults to []).
+ *   - steps: array of step strings (defaults to []).
+ *   - times: timing information object (defaults to {}).
+ *   - macros: nutritional macros object (defaults to {}).
+ *   - assumptions: array of assumption strings (defaults to []).
+ *   - confidence: object with `transcriptUsed` (`true` if transcript provided), `ocrUsed` (`true` if ocrText provided), `framesUsed` (number of frames provided), and `source` (from recipe.confidence.source or `'openai-gpt'`).
+ *   - transcriptSnippet: truncated transcript (up to 160 chars) when a transcript is provided, otherwise `undefined`.
+ */
 function normalizeRecipe(recipe, { transcript, ocrText, frames }) {
   return {
     title: recipe.title || 'Generated Recipe',
@@ -137,6 +200,31 @@ function normalizeRecipe(recipe, { transcript, ocrText, frames }) {
   };
 }
 
+/**
+ * Produce a heuristic recipe object to use when LLM-based generation fails.
+ *
+ * The returned object is a best-effort, offline fallback containing a draft
+ * title, servings, a short ingredient list, simple preparation steps, estimated
+ * times, macronutrient estimates, contextual assumptions (including truncated
+ * hints derived from OCR/transcript if available), a confidence summary, and
+ * an optional transcript snippet.
+ *
+ * @param {Object} params - Input signals used to build contextual hints.
+ * @param {string} [params.url] - Source video URL (not required but may provide context).
+ * @param {string} [params.transcript] - Full or partial transcript text; a truncated snippet may be included in the result.
+ * @param {string} [params.ocrText] - OCR-extracted text from frames; used to generate context hints.
+ * @param {string[]} [params.frames] - Array of frame file paths; only presence/length is recorded in the confidence object.
+ * @returns {Object} A normalized recipe-like object with the following keys:
+ *   - title {string}
+ *   - servings {number}
+ *   - ingredients {Array<{name: string, quantity: string}>}
+ *   - steps {string[]}
+ *   - times {{prepMinutes: number, cookMinutes: number}}
+ *   - macros {{calories: number, protein: number, carbs: number, fat: number}}
+ *   - assumptions {string[]} (includes context hints and a note that this is a fallback)
+ *   - confidence {{transcriptUsed: boolean, ocrUsed: boolean, framesUsed: number, source: string}}
+ *   - transcriptSnippet {string|undefined} (truncated transcript when available)
+ */
 function buildFallbackRecipe({ url, transcript, ocrText, frames }) {
   const hints = [];
   if (ocrText) hints.push(truncate(ocrText, 200));
@@ -175,12 +263,28 @@ function buildFallbackRecipe({ url, transcript, ocrText, frames }) {
   };
 }
 
+/**
+ * Truncate text to a maximum number of characters, appending an ellipsis when truncation occurs.
+ * @param {string} text - The input text to truncate; falsy values produce an empty string.
+ * @param {number} max - Maximum number of characters to keep from the start of `text`; if truncation occurs an ellipsis (`…`) is appended after these characters.
+ * @returns {string} The original text if its length is less than or equal to `max`, otherwise the first `max` characters followed by an ellipsis, or an empty string for falsy input.
+ */
 function truncate(text, max) {
   if (!text) return '';
   if (text.length <= max) return text;
   return `${text.slice(0, max)}…`;
 }
 
+/**
+ * Retrieve LLM-related configuration values from environment variables, falling back to sensible defaults.
+ *
+ * @returns {{model: string, maxTranscriptChars: number, maxOcrChars: number, maxFrameImages: number}}
+ * An object containing:
+ * - model: the OpenAI model identifier to use.
+ * - maxTranscriptChars: maximum number of transcript characters to include.
+ * - maxOcrChars: maximum number of OCR characters to include.
+ * - maxFrameImages: maximum number of frame images to include.
+ */
 function getLlmConfig() {
   return {
     model: process.env.OPENAI_RECIPE_MODEL || 'gpt-4o-mini',

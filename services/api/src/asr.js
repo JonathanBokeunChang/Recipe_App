@@ -5,6 +5,21 @@ import OpenAI from 'openai';
 import { runCommand } from './exec.js';
 import './env.js';
 
+/**
+ * Orchestrates transcription for an audio file using configured ASR providers and fallbacks.
+ *
+ * Attempts Whisper CLI when configured; falls back to OpenAI ASR if available. Returns a truncated
+ * transcript or a short unavailable-message when no provider can produce a transcript.
+ *
+ * @param {Object} params - Function parameters.
+ * @param {string} params.audioPath - Filesystem path to the audio file to transcribe.
+ * @param {string} params.workdir - Working directory used for temporary Whisper CLI output.
+ * @param {string} [params.sourceUrl] - Optional original source URL to include in recoverable-error messages.
+ * @returns {string} The transcript or a short message indicating transcript unavailability; text is truncated to the configured maximum length.
+ * @throws {Error} If `audioPath` is missing.
+ * @throws {Error} If the provider is `openai` but `OPENAI_API_KEY` is not set.
+ * @throws {Error} If transcription with the configured providers ultimately fails.
+ */
 export async function transcribeAudio({ audioPath, workdir, sourceUrl }) {
   if (!audioPath) throw new Error('audioPath is required for transcription.');
   const config = getAsrConfig();
@@ -45,6 +60,19 @@ export async function transcribeAudio({ audioPath, workdir, sourceUrl }) {
   throw new Error('Transcription failed. Check ASR configuration and try again.');
 }
 
+/**
+ * Attempts to transcribe audio using the local Whisper CLI and returns a truncated transcript on success.
+ *
+ * If the Whisper CLI is not available or fails and the active provider is not explicitly "whisper", the function returns `null`
+ * to indicate the caller should fall back to another ASR provider. If the active provider is "whisper", errors from the CLI are rethrown.
+ *
+ * @param {Object} params
+ * @param {string} params.audioPath - Path to the audio file to transcribe.
+ * @param {string} params.workdir - Working directory where Whisper will write output files.
+ * @param {string} [params.provider] - Optional configured ASR provider; when set to `"whisper"` the function treats CLI failures as fatal.
+ * @returns {string|null} The truncated transcript if Whisper succeeded, or `null` if the CLI is missing or failed and fallback is allowed.
+ * @throws {Error} If the Whisper CLI fails and the active provider is `"whisper"`.
+ */
 async function tryWhisperCli({ audioPath, workdir, provider }) {
   const { whisperModel } = getAsrConfig();
   const outputBase = path.join(workdir, 'asr');
@@ -80,6 +108,19 @@ async function tryWhisperCli({ audioPath, workdir, provider }) {
   }
 }
 
+/**
+ * Transcribes an audio file using OpenAI's ASR model.
+ *
+ * Attempts to return a truncated transcript string. If a recoverable OpenAI error occurs
+ * (network/quota), returns a truncated message indicating transcript unavailability
+ * (optionally including the provided source URL). Non-recoverable errors are thrown.
+ *
+ * @param {Object} params
+ * @param {string} params.audioPath - Path to the local audio file to transcribe.
+ * @param {string} [params.sourceUrl] - Optional original source URL to include in fallback messages.
+ * @returns {string} The transcript or a truncated explanatory message when transcription cannot be obtained.
+ * @throws {Error} If OPENAI_API_KEY is not set or if transcription fails with a non-recoverable error.
+ */
 async function transcribeWithOpenAI({ audioPath, sourceUrl }) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -111,6 +152,11 @@ async function transcribeWithOpenAI({ audioPath, sourceUrl }) {
   }
 }
 
+/**
+ * Trims input to a string and truncates it to the configured maximum transcript length.
+ * @param {*} text - Value to normalize and truncate; non-strings will be coerced to string.
+ * @returns {string} The trimmed text, or a truncated version ending with an ellipsis (`…`) if it exceeded `maxTranscriptChars`.
+ */
 function truncate(text) {
   if (!text) return '';
   const clean = text.toString().trim();
@@ -119,6 +165,11 @@ function truncate(text) {
   return `${clean.slice(0, maxTranscriptChars)}…`;
 }
 
+/**
+ * Determines whether an ASR error is likely transient or recoverable (for example, network, timeout, TLS/certificate, or quota issues).
+ * @param {*} err - The error object to evaluate; may include `code`, `status`, `message`, or a `cause`.
+ * @returns {boolean} `true` if the error is likely recoverable (network/connect/timeouts, socket/TLS/certificate issues, or quota/429 conditions), `false` otherwise.
+ */
 function isRecoverableAsrError(err) {
   const code = err?.code || err?.cause?.code;
   const msg = (err?.message || err?.toString?.() || '').toLowerCase();
@@ -143,6 +194,16 @@ function isRecoverableAsrError(err) {
   );
 }
 
+/**
+ * Load ASR runtime configuration from environment variables, applying sensible defaults.
+ *
+ * @returns {{provider: string, whisperModel: string, openaiAsrModel: string, maxTranscriptChars: number}}
+ * An object containing ASR configuration:
+ * - provider: active ASR provider ('auto', 'whisper', or 'openai'); defaults to 'auto'.
+ * - whisperModel: model name to use for the Whisper CLI; defaults to 'tiny'.
+ * - openaiAsrModel: OpenAI ASR model name; defaults to 'whisper-1'.
+ * - maxTranscriptChars: maximum characters allowed for returned transcripts; numeric, defaults to 12000.
+ */
 function getAsrConfig() {
   return {
     provider: process.env.ASR_PROVIDER || 'auto', // auto | whisper | openai

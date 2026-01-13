@@ -14,6 +14,17 @@ logEnvStatus();
 app.use(cors());
 app.use(express.json());
 
+/**
+ * Create and enqueue a new processing job for the given source URL and provider.
+ *
+ * The job is persisted and processing is started asynchronously; the function
+ * returns immediately with the created job record in 'queued' state.
+ *
+ * @param {Object} params - Creation parameters.
+ * @param {string} params.sourceUrl - The normalized source URL to process.
+ * @param {string} params.provider - The content provider identifier (e.g., 'tiktok').
+ * @returns {Object} The created job object containing `id`, `status` ('queued'), `provider`, `sourceUrl`, `createdAt`, and `updatedAt`.
+ */
 async function createJob({ sourceUrl, provider }) {
   const id = nanoid();
   const job = {
@@ -37,6 +48,15 @@ async function createJob({ sourceUrl, provider }) {
   return job;
 }
 
+/**
+ * Execute the processing pipeline for a job and update the job record with progress and outcome.
+ *
+ * If the job id does not exist the function exits without side effects. While processing, the job's
+ * status is set to "processing". On success the job is updated to "completed" with the pipeline
+ * `result`, `steps`, and `durationMs`. On failure the job is updated to "failed" with an error message.
+ *
+ * @param {string} id - The identifier of the job to process.
+ */
 async function processJob(id) {
   const current = await store.get(id);
   if (!current) return;

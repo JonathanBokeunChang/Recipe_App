@@ -6,6 +6,14 @@ import { transcribeAudio } from './asr.js';
 import { generateRecipeFromVideo } from './llm.js';
 import { normalizeTikTokUrl } from './tiktok.js';
 
+/**
+ * Orchestrates a pipeline that downloads a TikTok video, extracts audio and frames, runs OCR and transcription, and generates a recipe from the video.
+ *
+ * @param {Object} params - Function parameters.
+ * @param {string} params.sourceUrl - The TikTok video URL (raw user-provided URL) to process.
+ * @returns {{ recipe: any, steps: Array<{name:string,status:string,durationMs:number,error?:string}>, workdir: string, durationMs: number }} An object containing the generated `recipe`, an array of `steps` with metadata (name, status, durationMs, and optional error), the temporary `workdir` path, and total `durationMs` for the pipeline run.
+ * @throws {Error} If URL normalization fails, if required CLI tools (yt-dlp, ffmpeg) are not installed, or if a step fails irrecoverably.
+ */
 export async function runTikTokPipeline({ sourceUrl }) {
   const steps = [];
   const startedAt = Date.now();
@@ -133,6 +141,13 @@ export async function runTikTokPipeline({ sourceUrl }) {
   };
 }
 
+/**
+ * Provide configuration for frame sampling when extracting frames from a video.
+ *
+ * @returns {{fps: number, maxFrames: number}} Configuration object:
+ *  - `fps`: frames per second to sample (from `FRAME_SAMPLE_FPS`, default 2 — one frame every 0.5 seconds).
+ *  - `maxFrames`: maximum number of frames to extract (from `MAX_FRAME_SAMPLES`, default 24).
+ */
 function getFrameConfig() {
   return {
     fps: Number(process.env.FRAME_SAMPLE_FPS ?? 2), // default: 1 frame every 0.5s
