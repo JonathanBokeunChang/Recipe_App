@@ -51,6 +51,14 @@ export default function RootLayout() {
   );
 }
 
+/**
+ * Renders the app's themed navigation layout and guards initial routing based on authentication and navigation readiness.
+ *
+ * When navigation state or routing segments are not yet available, displays a centered loading indicator.
+ * Once navigation is ready, redirects unauthenticated users to the sign-in flow and authenticated users away from the auth flow.
+ *
+ * @returns The root navigation UI: a ThemeProvider with the app Stack (including `(auth)`, `(tabs)`, `paste-link`, and `modal` screens), or a centered ActivityIndicator while navigation initializes.
+ */
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
   const { user } = useAuth();

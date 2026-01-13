@@ -6,6 +6,15 @@ const TIKTOK_HOSTS = new Set([
   'vt.tiktok.com',
 ]);
 
+/**
+ * Validate and normalize a TikTok video URL, ensuring it is a full TikTok link and removing query and fragment.
+ *
+ * If the input is missing, not a valid URL, not a TikTok host, or has no path, the function returns an error object
+ * describing the specific problem.
+ *
+ * @param {string|any} input - The value to normalize; typically a user-provided URL or URL-like string.
+ * @returns {{ok: true, url: string} | {ok: false, error: string}} `ok: true` with the normalized URL string on success; `ok: false` with an error message on failure.
+ */
 export function normalizeTikTokUrl(input) {
   const trimmed = input?.trim?.();
   if (!trimmed) return { ok: false, error: 'Enter a TikTok URL' };

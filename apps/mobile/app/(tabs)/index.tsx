@@ -4,6 +4,14 @@ import { useRouter } from 'expo-router';
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/components/auth';
 
+/**
+ * Home screen displaying the user's sign-in status and primary actions for adding video content.
+ *
+ * The screen shows whether the current user is a Guest or Member and provides buttons to
+ * navigate to the paste-link screen, open an informational alert about uploads, and sign out.
+ *
+ * @returns The rendered screen component as a JSX element.
+ */
 export default function TabOneScreen() {
   const { user, signOut } = useAuth();
   const router = useRouter();

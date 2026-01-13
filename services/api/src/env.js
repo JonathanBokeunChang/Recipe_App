@@ -27,6 +27,11 @@ for (const candidate of candidates) {
 
 export const envInfo = { tried, loaded };
 
+/**
+ * Log whether OPENAI_API_KEY is present, which .env files were loaded, and the current working directory.
+ *
+ * Writes a single info-level line containing: OPENAI_API_KEY status (`set` or `missing`), the comma-separated list of loaded .env paths (or `none`), and the current working directory.
+ */
 export function logEnvStatus() {
   const keyStatus = process.env.OPENAI_API_KEY ? 'set' : 'missing';
   const loadedMsg = loaded.length ? loaded.join(', ') : 'none';

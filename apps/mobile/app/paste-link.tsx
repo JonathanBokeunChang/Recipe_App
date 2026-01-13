@@ -20,6 +20,14 @@ const TIKTOK_HOSTS = new Set([
   'vt.tiktok.com',
 ]);
 
+/**
+ * Normalize a user-provided URL string into a URL object or indicate invalid input.
+ *
+ * Trims surrounding whitespace and ensures the string includes a protocol (defaults to `https` if absent) before attempting to parse it as a URL.
+ *
+ * @param input - The raw URL string provided by the user
+ * @returns A `URL` instance for the normalized input, or `null` if the input is empty or cannot be parsed as a valid URL
+ */
 function normalizeUrl(input: string): URL | null {
   const trimmed = input.trim();
   if (!trimmed) return null;
@@ -31,6 +39,15 @@ function normalizeUrl(input: string): URL | null {
   }
 }
 
+/**
+ * Parse and validate a user-provided video URL and return a normalized TikTok link ready for processing.
+ *
+ * Attempts to normalize the input into a URL, verifies the host is TikTok, ensures a non-empty path,
+ * strips query and fragment components, and returns the normalized URL and provider on success.
+ *
+ * @param input - The raw URL string supplied by the user
+ * @returns `{ ok: true; provider: 'tiktok'; normalizedUrl: string }` on success, or `{ ok: false; error: string }` on failure
+ */
 function parseVideoLink(input: string): ParseResult {
   const url = normalizeUrl(input);
   if (!url) {
@@ -53,6 +70,13 @@ function parseVideoLink(input: string): ParseResult {
   return { ok: true, provider: 'tiktok', normalizedUrl: url.toString() };
 }
 
+/**
+ * Screen that lets the user paste a TikTok video link, validate and submit it for backend processing, and view job status and the extracted result.
+ *
+ * Renders an input for a video URL, controls to check and start processing, status and error messages, a normalized-link preview when available, and a detailed result view after processing completes.
+ *
+ * @returns A React element rendering the paste-link UI and its interactive states.
+ */
 export default function PasteLinkScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';

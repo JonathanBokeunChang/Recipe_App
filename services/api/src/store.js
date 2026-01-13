@@ -3,6 +3,11 @@ import path from 'node:path';
 
 const DATA_DIR = path.join(process.cwd(), 'data', 'jobs');
 
+/**
+ * Ensure the DATA_DIR directory exists, creating it and any missing parent directories.
+ *
+ * If the directory already exists, this is a no-op; otherwise the directory tree is created.
+ */
 async function ensureDir() {
   await fs.mkdir(DATA_DIR, { recursive: true });
 }
