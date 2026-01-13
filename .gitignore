@@ -1,0 +1,22 @@
+# Env files
+.env
+*.env
+services/.env
+
+# Dependencies
+node_modules
+apps/mobile/node_modules
+services/api/node_modules
+
+# Build artifacts
+.expo
+.expo-shared
+dist
+build
+coverage
+
+# Generated job data
+services/api/data/jobs
+
+# OS/editor noise
+.DS_Store
