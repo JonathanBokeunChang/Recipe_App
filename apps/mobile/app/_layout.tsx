@@ -1,9 +1,10 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useRootNavigationState, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
+import { ActivityIndicator, View } from 'react-native';
+import { useEffect, useState } from 'react';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
@@ -55,8 +56,17 @@ function RootLayoutNav() {
   const { user } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  const navigationState = useRootNavigationState();
+  const [isNavigationReady, setIsNavigationReady] = useState(false);
 
   useEffect(() => {
+    if (navigationState?.key && navigationState.routes?.length) {
+      setIsNavigationReady(true);
+    }
+  }, [navigationState?.key, navigationState?.routes?.length]);
+
+  useEffect(() => {
+    if (!isNavigationReady || segments.length === 0) return; // wait for nav + segments
     const inAuthGroup = segments[0] === '(auth)';
     if (!user && !inAuthGroup) {
       router.replace('/(auth)/sign-in');
@@ -64,13 +74,25 @@ function RootLayoutNav() {
     if (user && inAuthGroup) {
       router.replace('/(tabs)');
     }
-  }, [user, segments, router]);
+  }, [user, segments, router, isNavigationReady]);
+
+  if (!isNavigationReady || segments.length === 0) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator />
+      </View>
+    );
+  }
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="paste-link"
+          options={{ title: 'Paste video link', headerBackTitle: 'Back' }}
+        />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>
     </ThemeProvider>

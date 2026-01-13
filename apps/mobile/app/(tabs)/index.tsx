@@ -1,10 +1,12 @@
-import { Pressable, StyleSheet } from 'react-native';
+import { Alert, Pressable, StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
 
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/components/auth';
 
 export default function TabOneScreen() {
   const { user, signOut } = useAuth();
+  const router = useRouter();
 
   return (
     <View style={styles.container}>
@@ -19,10 +21,15 @@ export default function TabOneScreen() {
       </View>
 
       <View style={styles.actions}>
-        <Pressable style={styles.primaryButton}>
+        <Pressable style={styles.primaryButton} onPress={() => router.push('/paste-link')}>
           <Text style={styles.primaryButtonText}>Paste Video Link</Text>
         </Pressable>
-        <Pressable style={styles.secondaryButton}>
+        <Pressable
+          style={styles.secondaryButton}
+          onPress={() =>
+            Alert.alert('Upload coming soon', 'We will add video uploads next.')
+          }
+        >
           <Text style={styles.secondaryButtonText}>Upload Video</Text>
         </Pressable>
         <Pressable style={styles.linkButton} onPress={signOut}>
