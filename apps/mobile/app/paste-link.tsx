@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text, View } from '@/components/Themed';
 import { API_BASE_URL } from '@/constants/api';
 import { useColorScheme } from '@/components/useColorScheme';
+import { useAuth } from '@/components/auth';
 
 type VideoSource = 'tiktok';
 
@@ -56,6 +57,7 @@ function parseVideoLink(input: string): ParseResult {
 export default function PasteLinkScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
+  const { user } = useAuth();
 
   const [input, setInput] = React.useState('');
   const [status, setStatus] = React.useState<
@@ -66,6 +68,9 @@ export default function PasteLinkScreen() {
   const [provider, setProvider] = React.useState<VideoSource | null>(null);
   const [jobId, setJobId] = React.useState<string | null>(null);
   const [resultPreview, setResultPreview] = React.useState<any>(null);
+  const [modifiedRecipe, setModifiedRecipe] = React.useState<any>(null);
+  const [isModifying, setIsModifying] = React.useState(false);
+  const [modifyError, setModifyError] = React.useState<string | null>(null);
   const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
   const validate = () => {
@@ -120,6 +125,37 @@ export default function PasteLinkScreen() {
         setStatus('error');
         setMessage(err.message || 'Failed to queue job');
       });
+  };
+
+  const modifyForGoal = async () => {
+    if (!resultPreview || !user?.goal) return;
+
+    setIsModifying(true);
+    setModifyError(null);
+    setModifiedRecipe(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/recipes/modify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipe: resultPreview,
+          goalType: user.goal,
+        }),
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || 'Failed to modify recipe');
+      }
+
+      const data = await response.json();
+      setModifiedRecipe(data);
+    } catch (err: any) {
+      setModifyError(err.message || 'Failed to modify recipe');
+    } finally {
+      setIsModifying(false);
+    }
   };
 
   React.useEffect(() => {
@@ -237,17 +273,19 @@ export default function PasteLinkScreen() {
         </View>
 
         {status === 'completed' && resultPreview ? (
-          <View style={styles.resultCard} lightColor="#F9FAFB" darkColor="#0B1224">
-            <Text style={styles.resultTitle}>{resultPreview.title}</Text>
-            <Text style={styles.resultBody}>
-              {resultPreview.ingredients?.length ?? 0} ingredients ·{' '}
-              {resultPreview.steps?.length ?? 0} steps
-            </Text>
-            <Text style={styles.resultBody}>
-              Macros (est.): {resultPreview.macros?.calories ?? '?'} kcal · P
-              {resultPreview.macros?.protein ?? '?'} C{resultPreview.macros?.carbs ?? '?'} F
-              {resultPreview.macros?.fat ?? '?'}
-            </Text>
+          <>
+            <View style={styles.resultCard} lightColor="#F9FAFB" darkColor="#0B1224">
+              <Text style={styles.resultTitle}>Original Recipe</Text>
+              <Text style={styles.resultSubtitle}>{resultPreview.title}</Text>
+              <Text style={styles.resultBody}>
+                {resultPreview.ingredients?.length ?? 0} ingredients ·{' '}
+                {resultPreview.steps?.length ?? 0} steps
+              </Text>
+              <Text style={styles.resultBody}>
+                Macros (est.): {resultPreview.macros?.calories ?? '?'} kcal · P
+                {resultPreview.macros?.protein ?? '?'} C{resultPreview.macros?.carbs ?? '?'} F
+                {resultPreview.macros?.fat ?? '?'}
+              </Text>
 
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Ingredients</Text>
@@ -272,18 +310,189 @@ export default function PasteLinkScreen() {
               ))}
             </View>
 
-            {resultPreview.assumptions?.length ? (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Assumptions</Text>
-                {resultPreview.assumptions.map((assumption: string, idx: number) => (
-                  <View key={`assumption-${idx}`} style={styles.listRow}>
-                    <View style={styles.bullet} />
-                    <Text style={styles.listText}>{assumption}</Text>
+              {resultPreview.assumptions?.length ? (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Assumptions</Text>
+                  {resultPreview.assumptions.map((assumption: string, idx: number) => (
+                    <View key={`assumption-${idx}`} style={styles.listRow}>
+                      <View style={styles.bullet} />
+                      <Text style={styles.listText}>{assumption}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+
+              {user?.goal && !modifiedRecipe ? (
+                <View style={styles.section}>
+                  <Pressable
+                    style={[styles.modifyButton, isModifying && styles.primaryDisabled]}
+                    onPress={modifyForGoal}
+                    disabled={isModifying}
+                  >
+                    {isModifying ? (
+                      <ActivityIndicator color="#F9FAFB" />
+                    ) : (
+                      <Text style={styles.modifyButtonText}>
+                        Modify for {user.goal.replace('_', ' ')} goal
+                      </Text>
+                    )}
+                  </Pressable>
+                  {modifyError ? (
+                    <Text style={styles.errorText}>{modifyError}</Text>
+                  ) : null}
+                </View>
+              ) : null}
+
+              {!user?.goal ? (
+                <View style={styles.section}>
+                  <Text style={styles.warningText}>
+                    Select a goal on the Home tab to get AI-powered recipe modifications
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+
+            {modifiedRecipe ? (
+              <View style={styles.resultCard} lightColor="#ECFDF5" darkColor="#0B1F1A">
+                <Text style={styles.resultTitle}>
+                  Optimized for {modifiedRecipe.goalType.replace('_', ' ')}
+                </Text>
+                <Text style={styles.editCount}>
+                  {modifiedRecipe.edits?.length || 0} targeted edit{modifiedRecipe.edits?.length !== 1 ? 's' : ''}
+                </Text>
+
+                {/* Macro Comparison */}
+                <View style={styles.macroComparison}>
+                  <View style={styles.macroColumn}>
+                    <Text style={styles.macroLabel}>Original</Text>
+                    <Text style={styles.macroValue}>
+                      {modifiedRecipe.summary?.originalMacros?.calories ?? '?'} cal
+                    </Text>
+                    <Text style={styles.macroValue}>
+                      P {modifiedRecipe.summary?.originalMacros?.protein ?? '?'}g
+                    </Text>
+                    <Text style={styles.macroValue}>
+                      C {modifiedRecipe.summary?.originalMacros?.carbs ?? '?'}g
+                    </Text>
+                    <Text style={styles.macroValue}>
+                      F {modifiedRecipe.summary?.originalMacros?.fat ?? '?'}g
+                    </Text>
                   </View>
-                ))}
+                  <Text style={styles.macroArrow}>→</Text>
+                  <View style={styles.macroColumn}>
+                    <Text style={styles.macroLabel}>Modified</Text>
+                    <Text style={styles.macroValue}>
+                      {modifiedRecipe.summary?.newMacros?.calories ?? '?'} cal
+                    </Text>
+                    <Text style={styles.macroValue}>
+                      P {modifiedRecipe.summary?.newMacros?.protein ?? '?'}g
+                    </Text>
+                    <Text style={styles.macroValue}>
+                      C {modifiedRecipe.summary?.newMacros?.carbs ?? '?'}g
+                    </Text>
+                    <Text style={styles.macroValue}>
+                      F {modifiedRecipe.summary?.newMacros?.fat ?? '?'}g
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Top Macro Drivers */}
+                {modifiedRecipe.analysis?.topMacroDrivers?.length ? (
+                  <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Top Macro Drivers</Text>
+                    {modifiedRecipe.analysis.topMacroDrivers.map((driver: any, idx: number) => (
+                      <View key={`driver-${idx}`} style={styles.driverCard}>
+                        <Text style={styles.driverIngredient}>{driver.ingredient}</Text>
+                        <Text style={styles.driverContribution}>{driver.contribution}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+
+                {/* Edits Made */}
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Changes Made</Text>
+                  {modifiedRecipe.edits?.map((edit: any, idx: number) => (
+                    <View key={`edit-${idx}`} style={styles.changeCard}>
+                      <View style={styles.editHeader}>
+                        <Text style={styles.changeType}>{edit.lever?.replace(/_/g, ' ')}</Text>
+                        <View style={styles.scoreRow}>
+                          <Text style={styles.scoreLabel}>Taste: {edit.tasteScore}/5</Text>
+                          <Text style={styles.scoreLabel}>Texture: {edit.textureScore}/5</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.changeDetail}>
+                        <Text style={styles.strikethrough}>{edit.original}</Text> → {edit.modified}
+                      </Text>
+                      {edit.macroDelta ? (
+                        <Text style={styles.macroDelta}>
+                          {edit.macroDelta.calories ? `${edit.macroDelta.calories > 0 ? '+' : ''}${edit.macroDelta.calories} cal` : ''}
+                          {edit.macroDelta.protein ? ` P${edit.macroDelta.protein > 0 ? '+' : ''}${edit.macroDelta.protein}` : ''}
+                          {edit.macroDelta.carbs ? ` C${edit.macroDelta.carbs > 0 ? '+' : ''}${edit.macroDelta.carbs}` : ''}
+                          {edit.macroDelta.fat ? ` F${edit.macroDelta.fat > 0 ? '+' : ''}${edit.macroDelta.fat}` : ''}
+                        </Text>
+                      ) : null}
+                    </View>
+                  ))}
+                </View>
+
+                {/* Step Updates (only show if there are changes) */}
+                {modifiedRecipe.stepUpdates?.length ? (
+                  <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Updated Steps</Text>
+                    {modifiedRecipe.stepUpdates.map((update: any, idx: number) => (
+                      <View key={`step-update-${idx}`} style={styles.stepUpdateCard}>
+                        <Text style={styles.stepUpdateNumber}>Step {update.stepNumber}</Text>
+                        <Text style={styles.stepUpdateText}>{update.modified}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+
+                {/* Warnings */}
+                {modifiedRecipe.warnings?.length ? (
+                  <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Notes</Text>
+                    {modifiedRecipe.warnings.map((warning: string, idx: number) => (
+                      <View key={`warning-${idx}`} style={styles.listRow}>
+                        <View style={styles.bullet} />
+                        <Text style={styles.warningText}>{warning}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+
+                {/* Modified Recipe - Full Ingredients */}
+                {modifiedRecipe.modifiedRecipe?.ingredients?.length ? (
+                  <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Modified Ingredients</Text>
+                    {modifiedRecipe.modifiedRecipe.ingredients.map((item: any, idx: number) => (
+                      <View key={`mod-ing-${idx}`} style={styles.listRow}>
+                        <View style={styles.bullet} />
+                        <Text style={styles.listText}>
+                          {item.quantity ? `${item.quantity} ` : ''}
+                          {item.name}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+
+                {/* Modified Recipe - Full Steps */}
+                {modifiedRecipe.modifiedRecipe?.steps?.length ? (
+                  <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Modified Steps</Text>
+                    {modifiedRecipe.modifiedRecipe.steps.map((step: string, idx: number) => (
+                      <View key={`mod-step-${idx}`} style={styles.stepRow}>
+                        <Text style={styles.stepNumber}>{idx + 1}</Text>
+                        <Text style={styles.stepText}>{step}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
               </View>
             ) : null}
-          </View>
+          </>
         ) : null}
       </ScrollView>
     </SafeAreaView>
@@ -392,9 +601,147 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
+  resultSubtitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    opacity: 0.9,
+  },
+  editCount: {
+    fontSize: 13,
+    fontWeight: '600',
+    opacity: 0.7,
+  },
   resultBody: {
     fontSize: 13,
     opacity: 0.8,
+  },
+  modifyButton: {
+    backgroundColor: '#059669',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  modifyButtonText: {
+    color: '#F9FAFB',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  warningText: {
+    fontSize: 12,
+    opacity: 0.7,
+    fontStyle: 'italic',
+    lineHeight: 18,
+  },
+  errorText: {
+    fontSize: 13,
+    color: '#DC2626',
+    marginTop: 8,
+  },
+  macroComparison: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingVertical: 16,
+    marginTop: 8,
+  },
+  macroColumn: {
+    gap: 4,
+    alignItems: 'center',
+  },
+  macroLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    opacity: 0.6,
+    marginBottom: 4,
+  },
+  macroValue: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  macroArrow: {
+    fontSize: 20,
+    fontWeight: '700',
+    opacity: 0.5,
+  },
+  reasoningText: {
+    fontSize: 13,
+    lineHeight: 20,
+    opacity: 0.85,
+  },
+  changeCard: {
+    backgroundColor: 'rgba(0,0,0,0.03)',
+    padding: 12,
+    borderRadius: 8,
+    gap: 4,
+  },
+  changeType: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    opacity: 0.6,
+  },
+  changeDetail: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  strikethrough: {
+    textDecorationLine: 'line-through',
+    opacity: 0.5,
+  },
+  changeReason: {
+    fontSize: 12,
+    opacity: 0.7,
+    lineHeight: 18,
+  },
+  editHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  scoreRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  scoreLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    opacity: 0.6,
+  },
+  macroDelta: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#059669',
+    marginTop: 4,
+  },
+  driverCard: {
+    backgroundColor: 'rgba(0,0,0,0.02)',
+    padding: 10,
+    borderRadius: 8,
+    gap: 2,
+  },
+  driverIngredient: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  driverContribution: {
+    fontSize: 11,
+    opacity: 0.7,
+  },
+  stepUpdateCard: {
+    backgroundColor: 'rgba(0,0,0,0.02)',
+    padding: 10,
+    borderRadius: 8,
+    gap: 4,
+  },
+  stepUpdateNumber: {
+    fontSize: 11,
+    fontWeight: '700',
+    opacity: 0.6,
+  },
+  stepUpdateText: {
+    fontSize: 13,
+    lineHeight: 18,
   },
   section: {
     marginTop: 8,

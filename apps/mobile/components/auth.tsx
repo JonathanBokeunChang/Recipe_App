@@ -1,15 +1,19 @@
 import React, { createContext, useContext, useMemo, useState } from 'react';
 
+export type GoalType = 'bulk' | 'lean_bulk' | 'cut';
+
 type User = {
   id: string;
   kind: 'guest';
   createdAt: string;
+  goal?: GoalType;
 };
 
 type AuthContextValue = {
   user: User | null;
   signInGuest: () => void;
   signOut: () => void;
+  setGoal: (goal: GoalType) => void;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -24,7 +28,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = () => setUser(null);
 
-  const value = useMemo(() => ({ user, signInGuest, signOut }), [user]);
+  const setGoal = (goal: GoalType) => {
+    if (user) {
+      setUser({ ...user, goal });
+    }
+  };
+
+  const value = useMemo(() => ({ user, signInGuest, signOut, setGoal }), [user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

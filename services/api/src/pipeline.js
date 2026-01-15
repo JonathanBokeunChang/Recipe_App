@@ -2,7 +2,6 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { runCommand } from './exec.js';
-import { transcribeAudio } from './asr.js';
 import { generateRecipeFromVideo } from './llm.js';
 import { normalizeTikTokUrl } from './tiktok.js';
 
@@ -62,67 +61,8 @@ export async function runTikTokPipeline({ sourceUrl }) {
     return dest;
   });
 
-  const audioPath = await runStep('extract_audio', async () => {
-    const dest = path.join(workdir, 'audio.wav');
-    try {
-      await runCommand('ffmpeg', ['-y', '-i', videoPath, '-vn', '-ac', '1', '-ar', '16000', dest]);
-    } catch (err) {
-      if (err?.code === 'ENOENT') {
-        throw new Error('ffmpeg not installed. Install ffmpeg to extract audio for transcription.');
-      }
-      throw err;
-    }
-    return dest;
-  });
-
-  const transcript = await runStep('transcribe_audio', async () => {
-    return transcribeAudio({ audioPath, workdir, sourceUrl: resolvedUrl });
-  });
-
-  const framePaths = await runStep('sample_frames', async () => {
-    const pattern = path.join(workdir, 'frame-%02d.jpg');
-    const frameCfg = getFrameConfig();
-    try {
-      const args = ['-y', '-i', videoPath, '-vf', `fps=${frameCfg.fps}`];
-      if (frameCfg.maxFrames > 0) {
-        args.push('-frames:v', String(frameCfg.maxFrames));
-      }
-      args.push(pattern);
-      await runCommand('ffmpeg', args);
-    } catch (err) {
-      if (err?.code === 'ENOENT') {
-        throw new Error('ffmpeg not installed. Install ffmpeg to capture frames for OCR/vision.');
-      }
-      throw err;
-    }
-    const files = await fs.readdir(workdir);
-    return files.filter((f) => f.startsWith('frame-') && f.endsWith('.jpg')).map((f) => path.join(workdir, f));
-  });
-
-  const ocrText = await runStep('ocr_frames', async () => {
-    if (!framePaths.length) return '';
-    try {
-      const texts = [];
-      for (const frame of framePaths) {
-        const outBase = frame.replace(/\.jpg$/, '');
-        await runCommand('tesseract', [frame, outBase, '--psm', '6']);
-        const txt = await fs.readFile(`${outBase}.txt`, 'utf-8');
-        texts.push(txt.trim());
-      }
-      return texts.filter(Boolean).join('\n');
-    } catch {
-      // Keep pipeline going if OCR is unavailable; AI still has transcript + frames.
-      return '';
-    }
-  });
-
-  const recipe = await runStep('llm_recipe', async () => {
-    return generateRecipeFromVideo({
-      url: resolvedUrl,
-      transcript,
-      ocrText,
-      frames: framePaths,
-    });
+  const recipe = await runStep('gemini_video_recipe', async () => {
+    return generateRecipeFromVideo({ videoPath, url: resolvedUrl });
   });
 
   return {
@@ -130,12 +70,5 @@ export async function runTikTokPipeline({ sourceUrl }) {
     steps,
     workdir,
     durationMs: Date.now() - startedAt,
-  };
-}
-
-function getFrameConfig() {
-  return {
-    fps: Number(process.env.FRAME_SAMPLE_FPS ?? 2), // default: 1 frame every 0.5s
-    maxFrames: Number(process.env.MAX_FRAME_SAMPLES ?? 24), // cap to avoid huge extractions
   };
 }

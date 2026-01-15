@@ -5,10 +5,12 @@ import { logEnvStatus } from './env.js';
 import { runTikTokPipeline } from './pipeline.js';
 import { normalizeTikTokUrl } from './tiktok.js';
 import { JobStore } from './store.js';
+import { modifyRecipeForGoal } from './llm.js';
 
 const app = express();
 const port = process.env.PORT || 4000;
 const store = new JobStore();
+
 logEnvStatus();
 
 app.use(cors());
@@ -98,6 +100,44 @@ app.get('/api/jobs/:id', (req, res) => {
     .catch((err) => {
       res.status(500).json({ error: err?.message ?? 'Error fetching job' });
     });
+});
+
+app.post('/api/recipes/modify', async (req, res) => {
+  try {
+    const { recipe, goalType } = req.body;
+
+    if (!recipe || !goalType) {
+      return res.status(400).json({ error: 'recipe and goalType are required' });
+    }
+
+    if (!['bulk', 'lean_bulk', 'cut'].includes(goalType)) {
+      return res.status(400).json({ error: 'goalType must be bulk, lean_bulk, or cut' });
+    }
+
+    if (!recipe.macros || !recipe.ingredients || !recipe.steps) {
+      return res.status(400).json({ error: 'recipe must include macros, ingredients, and steps' });
+    }
+
+    console.log(`[modify] Starting modification for goal: ${goalType}`);
+
+    // Use Gemini to propose micro-edits based on available levers
+    const modification = await modifyRecipeForGoal(recipe, goalType);
+
+    // Return the new structured response format with the modified recipe
+    res.json({
+      originalRecipe: recipe,
+      modifiedRecipe: modification.modifiedRecipe,
+      analysis: modification.analysis,
+      edits: modification.edits,
+      stepUpdates: modification.stepUpdates || [],
+      summary: modification.summary,
+      warnings: modification.warnings || [],
+      goalType,
+    });
+  } catch (err) {
+    console.error('[modify] Error:', err);
+    res.status(500).json({ error: err?.message ?? 'Failed to modify recipe' });
+  }
 });
 
 app.listen(port, () => {

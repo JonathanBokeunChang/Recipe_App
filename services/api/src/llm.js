@@ -1,124 +1,90 @@
-import fs from 'node:fs/promises';
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleAIFileManager } from '@google/generative-ai/server';
 import './env.js';
+import { buildModificationPrompt } from './goals.js';
 
-export async function generateRecipeFromVideo({ url, transcript, ocrText = '', frames = [] }) {
+export async function generateRecipeFromVideo({ videoPath, url }) {
   const config = getLlmConfig();
-  const content = await buildContent({ url, transcript, ocrText, frames });
 
   try {
-    console.info(
-      '[llm] model',
-      config.model,
-      'frames',
-      frames?.length ?? 0,
-      'transcript',
-      Boolean(transcript),
-      'ocr',
-      Boolean(ocrText)
-    );
-    const client = createClient();
-    const response = await client.chat.completions.create({
-      model: config.model,
-      temperature: 0.35,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content },
-      ],
+    console.info('[llm] uploading video to Gemini for analysis');
+
+    const genAI = createClient();
+    const fileManager = new GoogleAIFileManager(process.env.GEMINI_API_KEY);
+
+    // Upload video file to Gemini
+    const uploadResult = await fileManager.uploadFile(videoPath, {
+      mimeType: 'video/mp4',
+      displayName: 'cooking-video'
     });
 
-    const message = response.choices?.[0]?.message?.content;
+    console.info('[llm] video uploaded, waiting for processing');
+
+    // Wait for video to be processed
+    let file = await fileManager.getFile(uploadResult.file.name);
+    while (file.state === 'PROCESSING') {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      file = await fileManager.getFile(uploadResult.file.name);
+    }
+
+    if (file.state === 'FAILED') {
+      throw new Error('Video processing failed on Gemini servers');
+    }
+
+    console.info('[llm] video processed, generating recipe with model', config.model);
+
+    // Generate recipe from video
+    const model = genAI.getGenerativeModel({
+      model: config.model,
+      generationConfig: {
+        temperature: 0.35,
+        responseMimeType: 'application/json'
+      }
+    });
+
+    const result = await model.generateContent([
+      {
+        fileData: {
+          fileUri: file.uri,
+          mimeType: file.mimeType
+        }
+      },
+      { text: SYSTEM_PROMPT }
+    ]);
+
+    const response = result.response;
+    const message = response.text();
+
     if (!message) {
       throw new Error('Recipe model returned no content.');
     }
 
+    // Clean up uploaded file
+    try {
+      await fileManager.deleteFile(uploadResult.file.name);
+      console.info('[llm] cleaned up uploaded video file');
+    } catch (cleanupErr) {
+      console.warn('[llm] failed to cleanup uploaded file:', cleanupErr?.message);
+    }
+
     const parsed = JSON.parse(message);
-    return normalizeRecipe(parsed, { transcript, ocrText, frames });
+    return normalizeRecipe(parsed, { url, videoAnalysis: true });
+
   } catch (err) {
-    console.warn('LLM fallback: using heuristic recipe because OpenAI call failed:', err?.message ?? err);
-    return buildFallbackRecipe({ url, transcript, ocrText, frames });
+    console.warn('LLM fallback: using heuristic recipe because Gemini call failed:', err?.message ?? err);
+    return buildFallbackRecipe({ url });
   }
 }
 
 function createClient() {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error('OPENAI_API_KEY is missing. Set it to enable recipe generation.');
+    throw new Error('GEMINI_API_KEY is missing. Set it to enable recipe generation.');
   }
-  return new OpenAI({ apiKey });
+  return new GoogleGenerativeAI(apiKey);
 }
 
-async function buildContent({ url, transcript, ocrText, frames }) {
-  const { maxTranscriptChars, maxOcrChars } = getLlmConfig();
-  const parts = [
-    {
-      type: 'text',
-      text: `Source video URL: ${url}`,
-    },
-    {
-      type: 'text',
-      text:
-        'Use the transcript, on-screen text, and frames to infer ingredients, amounts, cooking method, and timing. ' +
-        'Respect dietary safety: avoid allergens that are explicitly excluded in the video text or transcript.',
-    },
-  ];
-
-  if (transcript) {
-    parts.push({
-      type: 'text',
-      text: `Transcript (may be truncated):\n${truncate(transcript, maxTranscriptChars)}`,
-    });
-  }
-
-  if (ocrText) {
-    parts.push({
-      type: 'text',
-      text: `On-screen text/OCR (may be truncated):\n${truncate(ocrText, maxOcrChars)}`,
-    });
-  }
-
-  const encodedFrames = await encodeFrames(frames);
-  encodedFrames.forEach((frameUrl, idx) => {
-    parts.push({ type: 'text', text: `Frame ${idx + 1}` });
-    parts.push({
-      type: 'image_url',
-      image_url: { url: frameUrl, detail: 'auto' },
-    });
-  });
-
-  return parts;
-}
-
-async function encodeFrames(framePaths) {
-  if (!framePaths?.length) return [];
-  const { maxFrameImages } = getLlmConfig();
-  const ordered = [...framePaths].sort();
-  const limited = selectFrames(ordered, maxFrameImages);
-  const encoded = [];
-  for (const frame of limited) {
-    try {
-      const buf = await fs.readFile(frame);
-      encoded.push(`data:image/jpeg;base64,${buf.toString('base64')}`);
-    } catch {
-      // Skip unreadable frames.
-    }
-  }
-  return encoded;
-}
-
-function selectFrames(paths, maxCount) {
-  if (!maxCount || paths.length <= maxCount) return paths;
-  const selected = [];
-  const step = (paths.length - 1) / (maxCount - 1);
-  for (let i = 0; i < maxCount; i += 1) {
-    const idx = Math.round(i * step);
-    selected.push(paths[idx]);
-  }
-  return Array.from(new Set(selected));
-}
-
-function normalizeRecipe(recipe, { transcript, ocrText, frames }) {
+function normalizeRecipe(recipe, { url, videoAnalysis }) {
   return {
     title: recipe.title || 'Generated Recipe',
     servings: recipe.servings || 2,
@@ -128,27 +94,21 @@ function normalizeRecipe(recipe, { transcript, ocrText, frames }) {
     macros: recipe.macros || {},
     assumptions: recipe.assumptions || [],
     confidence: {
-      transcriptUsed: Boolean(transcript),
-      ocrUsed: Boolean(ocrText),
-      framesUsed: frames?.length ?? 0,
-      source: recipe?.confidence?.source || 'openai-gpt',
+      source: 'gemini-video',
+      videoAnalysis: videoAnalysis,
+      ...(recipe.confidence || {})
     },
-    transcriptSnippet: transcript ? truncate(transcript, 160) : undefined,
+    sourceUrl: url
   };
 }
 
-function buildFallbackRecipe({ url, transcript, ocrText, frames }) {
-  const hints = [];
-  if (ocrText) hints.push(truncate(ocrText, 200));
-  if (transcript) hints.push(truncate(transcript, 200));
-  if (!hints.length) hints.push('No transcript or OCR available; inferred a generic quick meal.');
-
+function buildFallbackRecipe({ url }) {
   const baseMacros = { calories: 480, protein: 30, carbs: 40, fat: 18 };
   return {
     title: 'Recipe draft (offline fallback)',
     servings: 2,
     ingredients: [
-      { name: 'Chicken or protein of choice', quantity: '400 g' },
+      { name: 'Protein of choice (chicken, tofu, etc.)', quantity: '400 g' },
       { name: 'Vegetables (mixed)', quantity: '2 cups, chopped' },
       { name: 'Oil or butter', quantity: '1.5 tbsp' },
       { name: 'Salt & pepper', quantity: 'to taste' },
@@ -161,40 +121,81 @@ function buildFallbackRecipe({ url, transcript, ocrText, frames }) {
     times: { prepMinutes: 10, cookMinutes: 15 },
     macros: baseMacros,
     assumptions: [
-      'Fallback recipe used because OpenAI was unavailable (quota/network).',
-      'Adjust ingredients to match the video once online.',
-      ...hints.map((h) => `Context hint: ${h}`),
+      'Fallback recipe used because Gemini video analysis was unavailable (quota/network).',
+      'Please check the original video to adjust ingredients and steps.',
     ],
     confidence: {
-      transcriptUsed: Boolean(transcript),
-      ocrUsed: Boolean(ocrText),
-      framesUsed: frames?.length ?? 0,
       source: 'fallback-heuristic',
+      videoAnalysis: false
     },
-    transcriptSnippet: transcript ? truncate(transcript, 160) : undefined,
+    sourceUrl: url
   };
-}
-
-function truncate(text, max) {
-  if (!text) return '';
-  if (text.length <= max) return text;
-  return `${text.slice(0, max)}…`;
 }
 
 function getLlmConfig() {
   return {
-    model: process.env.OPENAI_RECIPE_MODEL || 'gpt-4o-mini',
-    maxTranscriptChars: Number(process.env.MAX_TRANSCRIPT_CHARS ?? 12000),
-    maxOcrChars: Number(process.env.MAX_OCR_CHARS ?? 4000),
-    maxFrameImages: Number(process.env.MAX_FRAME_IMAGES ?? 8),
+    model: process.env.GEMINI_MODEL || 'gemini-1.5-flash'
   };
+}
+
+/**
+ * Modify a recipe using Gemini with constraint-based micro-edits
+ * @param {Object} recipe - Original recipe object
+ * @param {string} goalType - 'bulk' | 'lean_bulk' | 'cut'
+ * @returns {Promise<Object>} Modification result with edits and analysis
+ */
+export async function modifyRecipeForGoal(recipe, goalType) {
+  const config = getLlmConfig();
+
+  try {
+    console.info('[llm] modifying recipe for goal:', goalType);
+    console.info('[llm] recipe title:', recipe.title);
+    console.info('[llm] current macros:', JSON.stringify(recipe.macros));
+
+    const genAI = createClient();
+    const model = genAI.getGenerativeModel({
+      model: config.model,
+      generationConfig: {
+        temperature: 0.3, // Lower temperature for more consistent, deterministic edits
+        responseMimeType: 'application/json'
+      }
+    });
+
+    const prompt = buildModificationPrompt(recipe, goalType);
+    const result = await model.generateContent(prompt);
+    const response = result.response;
+    const message = response.text();
+
+    if (!message) {
+      throw new Error('Recipe modification model returned no content.');
+    }
+
+    const parsed = JSON.parse(message);
+
+    // Log the results
+    console.info('[llm] recipe modified successfully');
+    console.info('[llm] edits made:', parsed.edits?.length || 0);
+    console.info('[llm] new macros:', JSON.stringify(parsed.summary?.newMacros));
+
+    return parsed;
+
+  } catch (err) {
+    console.error('[llm] recipe modification failed:', err?.message ?? err);
+    throw new Error(`Failed to modify recipe: ${err?.message ?? 'Unknown error'}`);
+  }
 }
 
 const SYSTEM_PROMPT = `
 You are a culinary AI that turns cooking videos into detailed, editable recipes with macros.
-Use every signal (audio transcript, on-screen text, and provided frames) to infer ingredients, amounts, methods, timing, and macro estimates.
-Prioritize accuracy: transcript > on-screen OCR > frames. Use transcript for sequence/timing; use OCR for exact labels/quantities; use frames to resolve visual cues (doneness, ingredient identity, cooking method). When signals conflict, explain assumptions briefly in the "assumptions" array.
-Respond ONLY with a JSON object matching this shape:
+
+You have been given a complete cooking video. Analyze the ENTIRE video including:
+- Audio narration and dialogue (transcribe what you hear)
+- Visual ingredients and their quantities shown or mentioned
+- Cooking techniques, methods, and timing
+- On-screen text, labels, and measurements
+- The sequence of steps from start to finish
+
+Respond ONLY with a JSON object matching this exact shape:
 {
   "title": string,
   "servings": number,
@@ -203,11 +204,16 @@ Respond ONLY with a JSON object matching this shape:
   "times": { "prepMinutes": number, "cookMinutes": number },
   "macros": { "calories": number, "protein": number, "carbs": number, "fat": number },
   "assumptions": [string],
-  "confidence": { "source": "openai", "transcriptUsed": boolean, "ocrUsed": boolean, "framesUsed": number }
+  "confidence": { "source": "gemini-video", "videoLengthSeconds": number, "audioDetected": boolean, "ingredientsVisible": boolean }
 }
+
 Rules:
-- If quantities are missing, infer realistic amounts; note assumptions.
-- Include numbered, clear cooking steps (1 step per array item).
-- Macros should be per serving; state assumptions when estimating oils/sauces.
-- Avoid allergens explicitly excluded in the provided text; otherwise follow the video faithfully.
+- Extract exact quantities from audio narration or on-screen text when available
+- If quantities are missing, infer realistic amounts based on visual context; note these as assumptions
+- Include numbered, clear cooking steps (1 step per array item) in chronological order
+- Macros should be per serving; state assumptions when estimating hidden ingredients (oils, sauces, seasonings)
+- If the video mentions dietary restrictions or allergens to avoid, respect those in your analysis
+- For timing: prepMinutes = prep work before heat, cookMinutes = active cooking time
+- Be specific with ingredient names (e.g., "all-purpose flour" not just "flour")
+- Include cooking temperatures if mentioned (e.g., "Preheat oven to 350°F")
 `;
