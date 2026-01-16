@@ -9,6 +9,7 @@ import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { AuthProvider, useAuth } from '@/components/auth';
+import { QuizProvider, useQuiz } from '@/components/quiz-state';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -46,14 +47,17 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
-      <RootLayoutNav />
+      <QuizProvider>
+        <RootLayoutNav />
+      </QuizProvider>
     </AuthProvider>
   );
 }
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const { status: quizStatus } = useQuiz();
   const segments = useSegments();
   const router = useRouter();
   const navigationState = useRootNavigationState();
@@ -66,17 +70,23 @@ function RootLayoutNav() {
   }, [navigationState?.key, navigationState?.routes?.length]);
 
   useEffect(() => {
-    if (!isNavigationReady || segments.length === 0) return; // wait for nav + segments
+    if (!isNavigationReady || authLoading) return; // wait for nav + auth
     const inAuthGroup = segments[0] === '(auth)';
+    const inQuiz = segments[0] === 'quiz';
+
     if (!user && !inAuthGroup) {
       router.replace('/(auth)/sign-in');
+    }
+    if (user && quizStatus !== 'completed' && quizStatus !== 'skipped' && !inQuiz) {
+      router.replace('/quiz');
+      return;
     }
     if (user && inAuthGroup) {
       router.replace('/(tabs)');
     }
-  }, [user, segments, router, isNavigationReady]);
+  }, [user, segments, router, isNavigationReady, quizStatus, authLoading]);
 
-  if (!isNavigationReady || segments.length === 0) {
+  if (!isNavigationReady || authLoading) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
         <ActivityIndicator />
@@ -89,6 +99,7 @@ function RootLayoutNav() {
       <Stack>
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="quiz" options={{ headerShown: false }} />
         <Stack.Screen
           name="paste-link"
           options={{ title: 'Paste video link', headerBackTitle: 'Back' }}

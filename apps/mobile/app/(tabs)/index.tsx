@@ -3,10 +3,13 @@ import { useRouter } from 'expo-router';
 
 import { Text, View } from '@/components/Themed';
 import { useAuth, GoalType } from '@/components/auth';
+import { useQuiz } from '@/components/quiz-state';
 
 export default function TabOneScreen() {
   const { user, signOut, setGoal } = useAuth();
   const router = useRouter();
+  const { status: quizStatus } = useQuiz();
+  const showQuizReminder = quizStatus === 'skipped';
 
   const goals: { value: GoalType; label: string; description: string }[] = [
     { value: 'bulk', label: 'Bulk', description: 'Maximize muscle gain with calorie surplus' },
@@ -25,6 +28,18 @@ export default function TabOneScreen() {
           Start by pasting a video link or uploading a file to generate a recipe with macros.
         </Text>
       </View>
+
+      {showQuizReminder ? (
+        <View style={styles.banner} lightColor="#ECFEFF" darkColor="#0B1224">
+          <Text style={styles.bannerTitle}>Finish your quick setup</Text>
+          <Text style={styles.bannerBody}>
+            You skipped the intake quiz. Complete it to tighten macro targets and avoid allergens.
+          </Text>
+          <Pressable style={styles.bannerButton} onPress={() => router.push('/quiz')}>
+            <Text style={styles.bannerButtonText}>Resume quiz</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       <View style={styles.goalSelection}>
         <Text style={styles.goalTitle}>Your Goal</Text>
@@ -145,6 +160,34 @@ const styles = StyleSheet.create({
   },
   actions: {
     gap: 12,
+  },
+  banner: {
+    borderRadius: 14,
+    padding: 16,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#0F766E',
+  },
+  bannerTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  bannerBody: {
+    fontSize: 14,
+    lineHeight: 20,
+    opacity: 0.85,
+  },
+  bannerButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#0F766E',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 4,
+  },
+  bannerButtonText: {
+    color: '#F9FAFB',
+    fontWeight: '700',
   },
   primaryButton: {
     backgroundColor: '#111827',
