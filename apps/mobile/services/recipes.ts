@@ -81,7 +81,13 @@ export async function saveRecipe(
     throw new Error(error.message);
   }
 
-  console.log('[recipes] saved successfully:', data?.id);
+  // Detect silent RLS failure - insert was blocked but no error returned
+  if (!data || !data.id) {
+    console.error('[recipes] save failed: no data returned (likely RLS policy issue)');
+    throw new Error('Failed to save recipe. Please check your account permissions.');
+  }
+
+  console.log('[recipes] saved successfully:', data.id);
   return data as Recipe;
 }
 
