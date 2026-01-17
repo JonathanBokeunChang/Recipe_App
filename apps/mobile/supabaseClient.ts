@@ -37,5 +37,19 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
+    // Disable navigator.locks API which causes "signal is aborted without reason"
+    // errors on React Native where the Web Locks API isn't available
+    lock: async (_name: string, _acquireTimeout: number, callback: () => Promise<any>) => {
+      // Simply run the callback without locking - React Native doesn't need
+      // cross-tab coordination since there's only one "tab"
+      return await callback();
+    },
+  },
+  global: {
+    fetch: (url, options = {}) => {
+      // Remove abort signal to avoid React 19 / Supabase compatibility issue
+      const { signal, ...rest } = options as RequestInit & { signal?: AbortSignal };
+      return fetch(url, rest);
+    },
   },
 });
