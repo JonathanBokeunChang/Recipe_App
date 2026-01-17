@@ -29,8 +29,9 @@ export const envInfo = { tried, loaded };
 
 export function logEnvStatus() {
   const keyStatus = process.env.OPENAI_API_KEY ? 'set' : 'missing';
+  const fdcStatus = process.env.FDC_API_KEY ? 'set' : 'missing';
   const loadedMsg = loaded.length ? loaded.join(', ') : 'none';
   console.info(
-    `[env] OPENAI_API_KEY: ${keyStatus} | loaded: ${loadedMsg} | cwd: ${cwd}`
+    `[env] OPENAI_API_KEY: ${keyStatus} | FDC_API_KEY: ${fdcStatus} | loaded: ${loadedMsg} | cwd: ${cwd}`
   );
 }
