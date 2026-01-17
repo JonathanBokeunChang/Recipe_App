@@ -59,7 +59,7 @@ export default function SignInScreen() {
             {mode === 'signIn' ? 'Sign in' : 'Create account'}
           </Text>
           <Text style={styles.cardBody}>
-            Keep your recipe library and quiz settings synced to your profile.
+            Keep your preferences and quiz settings synced to your profile.
           </Text>
 
           <View style={styles.fieldGroup}>

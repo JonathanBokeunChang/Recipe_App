@@ -142,9 +142,10 @@ function getLlmConfig() {
  * Modify a recipe using Gemini with constraint-based micro-edits
  * @param {Object} recipe - Original recipe object
  * @param {string} goalType - 'bulk' | 'lean_bulk' | 'cut'
+ * @param {Object} userContext - Quiz-derived user info (allergens, stats, preferences)
  * @returns {Promise<Object>} Modification result with edits and analysis
  */
-export async function modifyRecipeForGoal(recipe, goalType) {
+export async function modifyRecipeForGoal(recipe, goalType, userContext = {}) {
   const config = getLlmConfig();
 
   try {
@@ -161,7 +162,7 @@ export async function modifyRecipeForGoal(recipe, goalType) {
       }
     });
 
-    const prompt = buildModificationPrompt(recipe, goalType);
+    const prompt = buildModificationPrompt(recipe, goalType, userContext);
     const result = await model.generateContent(prompt);
     const response = result.response;
     const message = response.text();

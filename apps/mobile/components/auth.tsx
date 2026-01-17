@@ -212,25 +212,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const setGoal = async (goal: GoalType) => {
     if (!user?.id) return;
 
-    const nextQuiz = {
-      ...(user.profile?.quiz ?? {}),
-      state: {
-        ...(user.profile?.quiz?.state ?? {}),
-        goal,
-      },
+    const existingState = user.profile?.quiz?.state;
+    const nextQuiz: NonNullable<Profile['quiz']> = {
+      state: existingState ? { ...existingState, goal } : { goal } as QuizState,
       status: user.profile?.quiz?.status ?? 'completed',
       updatedAt: new Date().toISOString(),
     };
 
-    setUser((prev) =>
-      prev
-        ? {
-            ...prev,
-            goal,
-            profile: prev.profile ? { ...prev.profile, quiz: nextQuiz } : prev.profile,
-          }
-        : prev,
-    );
+    setUser((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        goal,
+        profile: prev.profile ? { ...prev.profile, quiz: nextQuiz } : prev.profile,
+      };
+    });
 
     const { error } = await supabase.from('profiles').upsert({
       id: user.id,
