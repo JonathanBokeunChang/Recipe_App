@@ -6,7 +6,6 @@ import { Text, View } from '@/components/Themed';
 import { API_BASE_URL } from '@/constants/api';
 import { useColorScheme } from '@/components/useColorScheme';
 import { useAuth } from '@/components/auth';
-import { saveRecipe } from '@/services/recipes';
 
 type VideoSource = 'tiktok';
 
@@ -72,10 +71,6 @@ export default function PasteLinkScreen() {
   const [modifiedRecipe, setModifiedRecipe] = React.useState<any>(null);
   const [isModifying, setIsModifying] = React.useState(false);
   const [modifyError, setModifyError] = React.useState<string | null>(null);
-  const [isSaving, setIsSaving] = React.useState(false);
-  const [saveMessage, setSaveMessage] = React.useState<string | null>(null);
-  const [savedRecipeId, setSavedRecipeId] = React.useState<string | null>(null);
-  const [savedModifiedId, setSavedModifiedId] = React.useState<string | null>(null);
   const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
   const validate = () => {
@@ -160,51 +155,6 @@ export default function PasteLinkScreen() {
       setModifyError(err.message || 'Failed to modify recipe');
     } finally {
       setIsModifying(false);
-    }
-  };
-
-  const handleSaveRecipe = async (isModified: boolean = false) => {
-    if (!user?.id || user.kind === 'guest') {
-      setSaveMessage('Sign in to save recipes');
-      return;
-    }
-
-    const recipeToSave = isModified
-      ? modifiedRecipe?.modifiedRecipe
-      : resultPreview;
-
-    if (!recipeToSave) return;
-
-    setIsSaving(true);
-    setSaveMessage(null);
-
-    try {
-      const saved = await saveRecipe(
-        {
-          title: recipeToSave.title,
-          servings: recipeToSave.servings,
-          ingredients: recipeToSave.ingredients,
-          steps: recipeToSave.steps,
-          macros: recipeToSave.macros,
-          times: recipeToSave.times,
-          assumptions: recipeToSave.assumptions,
-          source_url: normalizedUrl ?? undefined,
-          goal_type: isModified ? modifiedRecipe?.goalType : null,
-          is_modified: isModified,
-        },
-        user.id
-      );
-
-      if (isModified) {
-        setSavedModifiedId(saved.id);
-      } else {
-        setSavedRecipeId(saved.id);
-      }
-      setSaveMessage('Saved to library!');
-    } catch (err: any) {
-      setSaveMessage(err.message || 'Failed to save recipe');
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -400,32 +350,6 @@ export default function PasteLinkScreen() {
                   </Text>
                 </View>
               ) : null}
-
-              {/* Save Original Recipe Button */}
-              <View style={styles.section}>
-                {savedRecipeId ? (
-                  <View style={styles.savedBadge}>
-                    <Text style={styles.savedBadgeText}>Saved to library</Text>
-                  </View>
-                ) : (
-                  <Pressable
-                    style={[styles.saveButton, isSaving && styles.primaryDisabled]}
-                    onPress={() => handleSaveRecipe(false)}
-                    disabled={isSaving}
-                  >
-                    {isSaving ? (
-                      <ActivityIndicator color="#111827" />
-                    ) : (
-                      <Text style={styles.saveButtonText}>
-                        {user?.kind === 'guest' ? 'Sign in to save' : 'Save to Library'}
-                      </Text>
-                    )}
-                  </Pressable>
-                )}
-                {saveMessage && !savedRecipeId ? (
-                  <Text style={styles.saveMessage}>{saveMessage}</Text>
-                ) : null}
-              </View>
             </View>
 
             {modifiedRecipe ? (
@@ -566,29 +490,6 @@ export default function PasteLinkScreen() {
                     ))}
                   </View>
                 ) : null}
-
-                {/* Save Modified Recipe Button */}
-                <View style={styles.section}>
-                  {savedModifiedId ? (
-                    <View style={styles.savedBadge}>
-                      <Text style={styles.savedBadgeText}>Modified recipe saved</Text>
-                    </View>
-                  ) : (
-                    <Pressable
-                      style={[styles.modifyButton, isSaving && styles.primaryDisabled]}
-                      onPress={() => handleSaveRecipe(true)}
-                      disabled={isSaving}
-                    >
-                      {isSaving ? (
-                        <ActivityIndicator color="#F9FAFB" />
-                      ) : (
-                        <Text style={styles.modifyButtonText}>
-                          {user?.kind === 'guest' ? 'Sign in to save' : 'Save Modified Recipe'}
-                        </Text>
-                      )}
-                    </Pressable>
-                  )}
-                </View>
               </View>
             ) : null}
           </>
@@ -881,37 +782,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
     opacity: 0.95,
-  },
-  saveButton: {
-    borderWidth: 1,
-    borderColor: '#111827',
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  saveButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  savedBadge: {
-    backgroundColor: '#D1FAE5',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  savedBadgeText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#065F46',
-  },
-  saveMessage: {
-    fontSize: 13,
-    color: '#059669',
-    marginTop: 8,
-    textAlign: 'center',
   },
 });
