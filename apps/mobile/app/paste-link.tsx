@@ -6,7 +6,6 @@ import { Text, View } from '@/components/Themed';
 import { API_BASE_URL } from '@/constants/api';
 import { useColorScheme } from '@/components/useColorScheme';
 import { useAuth } from '@/components/auth';
-import { useQuiz } from '@/components/quiz-state';
 
 type VideoSource = 'tiktok';
 
@@ -73,6 +72,10 @@ export default function PasteLinkScreen() {
   const [modifiedRecipe, setModifiedRecipe] = React.useState<any>(null);
   const [isModifying, setIsModifying] = React.useState(false);
   const [modifyError, setModifyError] = React.useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = React.useState<
+    'idle' | 'saving' | 'saved' | 'error'
+  >('idle');
+  const [saveMessage, setSaveMessage] = React.useState<string | null>(null);
   const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
   const validate = () => {
@@ -106,6 +109,9 @@ export default function PasteLinkScreen() {
     setNormalizedUrl(result.normalizedUrl);
     setProvider(result.provider);
     setResultPreview(null);
+    setModifiedRecipe(null);
+    setSaveStatus('idle');
+    setSaveMessage(null);
 
     fetch(`${API_BASE_URL}/api/ingest`, {
       method: 'POST',
@@ -172,6 +178,38 @@ export default function PasteLinkScreen() {
       setIsModifying(false);
     }
   };
+
+  const saveRecipe = async () => {
+    if (!resultPreview || !user?.id) return;
+
+    setSaveStatus('saving');
+    setSaveMessage(null);
+
+    try {
+      await saveRecipeToLibrary({
+        userId: user.id,
+        title:
+          modifiedRecipe?.modifiedRecipe?.title ??
+          modifiedRecipe?.title ??
+          resultPreview?.title ??
+          'Recipe',
+        videoUrl: normalizedUrl ?? input,
+        goalType: modifiedRecipe?.goalType ?? user.goal ?? null,
+        originalRecipe: resultPreview,
+        modifiedRecipe: modifiedRecipe ?? undefined,
+      });
+      setSaveStatus('saved');
+      setSaveMessage('Saved to your library.');
+    } catch (err: any) {
+      setSaveStatus('error');
+      setSaveMessage(err?.message || 'Failed to save recipe');
+    }
+  };
+
+  React.useEffect(() => {
+    setSaveStatus('idle');
+    setSaveMessage(null);
+  }, [resultPreview?.title, modifiedRecipe?.goalType]);
 
   React.useEffect(() => {
     if (!jobId) return;
@@ -301,19 +339,47 @@ export default function PasteLinkScreen() {
                 {resultPreview.macros?.protein ?? '?'} C{resultPreview.macros?.carbs ?? '?'} F
                 {resultPreview.macros?.fat ?? '?'}
               </Text>
-
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Ingredients</Text>
-              {resultPreview.ingredients?.map((item: any, idx: number) => (
-                <View key={`${item.name}-${idx}`} style={styles.listRow}>
-                  <View style={styles.bullet} />
-                  <Text style={styles.listText}>
-                    {item.quantity ? `${item.quantity} ` : ''}
-                    {item.name}
+              <View style={styles.section}>
+                <Pressable
+                  style={[
+                    styles.saveButton,
+                    (saveStatus === 'saving' || saveStatus === 'saved') && styles.primaryDisabled,
+                  ]}
+                  onPress={saveRecipe}
+                  disabled={saveStatus === 'saving' || saveStatus === 'saved'}
+                >
+                  {saveStatus === 'saving' ? (
+                    <ActivityIndicator color="#F9FAFB" />
+                  ) : (
+                    <Text style={styles.saveButtonText}>
+                      {saveStatus === 'saved' ? 'Saved' : 'Save to library'}
+                    </Text>
+                  )}
+                </Pressable>
+                {saveMessage ? (
+                  <Text
+                    style={[
+                      styles.saveMessage,
+                      saveStatus === 'error' && styles.saveMessageError,
+                    ]}
+                  >
+                    {saveMessage}
                   </Text>
-                </View>
-              ))}
-            </View>
+                ) : null}
+              </View>
+
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Ingredients</Text>
+                {resultPreview.ingredients?.map((item: any, idx: number) => (
+                  <View key={`${item.name}-${idx}`} style={styles.listRow}>
+                    <View style={styles.bullet} />
+                    <Text style={styles.listText}>
+                      {item.quantity ? `${item.quantity} ` : ''}
+                      {item.name}
+                    </Text>
+                  </View>
+                ))}
+              </View>
 
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Steps</Text>
@@ -629,6 +695,27 @@ const styles = StyleSheet.create({
   resultBody: {
     fontSize: 13,
     opacity: 0.8,
+  },
+  saveButton: {
+    backgroundColor: '#111827',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  saveButtonText: {
+    color: '#F9FAFB',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  saveMessage: {
+    fontSize: 12,
+    marginTop: 4,
+    opacity: 0.75,
+  },
+  saveMessageError: {
+    color: '#DC2626',
+    opacity: 1,
   },
   modifyButton: {
     backgroundColor: '#059669',
