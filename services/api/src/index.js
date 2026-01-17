@@ -6,6 +6,7 @@ import { runTikTokPipeline } from './pipeline.js';
 import { normalizeTikTokUrl } from './tiktok.js';
 import { JobStore } from './store.js';
 import { modifyRecipeForGoal } from './llm.js';
+import { estimateMacros } from './macros.js';
 
 const app = express();
 const port = process.env.PORT || 4000;
@@ -104,7 +105,7 @@ app.get('/api/jobs/:id', (req, res) => {
 
 app.post('/api/recipes/modify', async (req, res) => {
   try {
-    const { recipe, goalType } = req.body;
+    const { recipe, goalType, userContext } = req.body;
 
     if (!recipe || !goalType) {
       return res.status(400).json({ error: 'recipe and goalType are required' });
@@ -121,7 +122,7 @@ app.post('/api/recipes/modify', async (req, res) => {
     console.log(`[modify] Starting modification for goal: ${goalType}`);
 
     // Use Gemini to propose micro-edits based on available levers
-    const modification = await modifyRecipeForGoal(recipe, goalType);
+    const modification = await modifyRecipeForGoal(recipe, goalType, userContext ?? {});
 
     // Return the new structured response format with the modified recipe
     res.json({
@@ -137,6 +138,20 @@ app.post('/api/recipes/modify', async (req, res) => {
   } catch (err) {
     console.error('[modify] Error:', err);
     res.status(500).json({ error: err?.message ?? 'Failed to modify recipe' });
+  }
+});
+
+app.post('/api/macros/estimate', async (req, res) => {
+  try {
+    const { recipe } = req.body ?? {};
+    if (!recipe?.ingredients || !Array.isArray(recipe.ingredients)) {
+      return res.status(400).json({ error: 'recipe.ingredients is required' });
+    }
+    const result = await estimateMacros(recipe);
+    res.json(result);
+  } catch (err) {
+    console.error('[macros] Error:', err);
+    res.status(500).json({ error: err?.message ?? 'Failed to estimate macros' });
   }
 });
 

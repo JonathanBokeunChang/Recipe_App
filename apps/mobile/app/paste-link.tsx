@@ -6,6 +6,7 @@ import { Text, View } from '@/components/Themed';
 import { API_BASE_URL } from '@/constants/api';
 import { useColorScheme } from '@/components/useColorScheme';
 import { useAuth } from '@/components/auth';
+import { useQuiz } from '@/components/quiz-state';
 
 type VideoSource = 'tiktok';
 
@@ -58,6 +59,7 @@ export default function PasteLinkScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
   const { user } = useAuth();
+  const { quiz } = useQuiz();
 
   const [input, setInput] = React.useState('');
   const [status, setStatus] = React.useState<
@@ -133,6 +135,18 @@ export default function PasteLinkScreen() {
     setIsModifying(true);
     setModifyError(null);
     setModifiedRecipe(null);
+    const userContext = {
+      biologicalSex: quiz.biologicalSex,
+      age: quiz.age,
+      heightCm: quiz.heightCm,
+      weightKg: quiz.weightKg,
+      goalWeightKg: quiz.goalWeightKg,
+      activityLevel: quiz.activityLevel,
+      dietStyle: quiz.dietStyle,
+      allergens: quiz.allergens,
+      avoidList: quiz.avoidList,
+      pace: quiz.pace,
+    };
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/recipes/modify`, {
@@ -141,6 +155,7 @@ export default function PasteLinkScreen() {
         body: JSON.stringify({
           recipe: resultPreview,
           goalType: user.goal,
+          userContext,
         }),
       });
 

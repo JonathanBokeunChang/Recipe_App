@@ -37,13 +37,16 @@ export const GOAL_CONFIGS = {
 };
 
 /**
- * Build the modification prompt with strict target matching requirements
+ * Build the modification prompt with strict target matching requirements.
+ * Accepts optional user context (quiz answers) to honor constraints.
  */
-export function buildModificationPrompt(recipe, goalType) {
+export function buildModificationPrompt(recipe, goalType, userContext = {}) {
   const config = GOAL_CONFIGS[goalType];
   if (!config) {
     throw new Error(`Invalid goal type: ${goalType}`);
   }
+
+  const userProfile = formatUserContext(userContext);
 
   return `You are a nutrition optimization expert. Your job is to modify recipes to hit specific macro targets.
 
@@ -71,6 +74,9 @@ ${recipe.steps.map((step, i) => `${i + 1}. ${step}`).join('\n')}
 - Protein: ${recipe.macros.protein}g
 - Carbs: ${recipe.macros.carbs}g
 - Fat: ${recipe.macros.fat}g
+
+## USER PROFILE & CONSTRAINTS (from quiz)
+${userProfile}
 
 ---
 
@@ -125,6 +131,7 @@ You MUST modify ingredients to reach your Phase 1 targets. The final recipe macr
 3. Each modification MUST include the exact macro impact (macroDelta)
 4. The sum of original macros + all macroDelta values MUST equal the new macros
 5. Update cooking steps if your substitutions require different preparation
+6. NEVER include ingredients that conflict with allergens, diet style, or avoid-list above
 
 ---
 
@@ -189,4 +196,25 @@ IMPORTANT REQUIREMENTS:
 3. modifiedRecipe.macros MUST reflect the actual macros of the modified recipe
 4. summary.newMacros MUST match modifiedRecipe.macros
 5. Return ONLY valid JSON. No markdown, no explanation, just the JSON object.`;
+}
+
+function formatUserContext(ctx) {
+  const lines = [];
+  if (ctx.biologicalSex) lines.push(`- Sex: ${ctx.biologicalSex}`);
+  if (ctx.age) lines.push(`- Age: ${ctx.age}`);
+  if (ctx.heightCm) lines.push(`- Height: ${ctx.heightCm} cm`);
+  if (ctx.weightKg) lines.push(`- Weight: ${ctx.weightKg} kg`);
+  if (ctx.goalWeightKg) lines.push(`- Goal weight: ${ctx.goalWeightKg} kg`);
+  if (ctx.activityLevel) lines.push(`- Activity: ${ctx.activityLevel}`);
+  if (ctx.pace) lines.push(`- Pace (1-5): ${ctx.pace}`);
+  if (ctx.dietStyle && ctx.dietStyle !== 'none') lines.push(`- Diet style: ${ctx.dietStyle}`);
+  if (Array.isArray(ctx.allergens) && ctx.allergens.length) {
+    lines.push(`- Allergens to avoid: ${ctx.allergens.join(', ')}`);
+  }
+  if (ctx.avoidList) lines.push(`- Avoid list: ${ctx.avoidList}`);
+
+  if (!lines.length) {
+    return '- No additional user constraints provided';
+  }
+  return lines.join('\n');
 }
