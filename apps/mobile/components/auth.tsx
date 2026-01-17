@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
-import type { QuizState } from './quiz-state';
+import { defaultQuizState, type QuizState } from './quiz-state';
 import { supabase } from '@/supabaseClient';
 
 const logAuth = (...args: any[]) => {
@@ -212,12 +212,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const setGoal = async (goal: GoalType) => {
     if (!user?.id) return;
 
+    const nextQuizState: QuizState = {
+      ...defaultQuizState,
+      ...(user.profile?.quiz?.state ?? {}),
+      goal,
+    };
+
     const nextQuiz = {
       ...(user.profile?.quiz ?? {}),
-      state: {
-        ...(user.profile?.quiz?.state ?? {}),
-        goal,
-      },
+      state: nextQuizState,
       status: user.profile?.quiz?.status ?? 'completed',
       updatedAt: new Date().toISOString(),
     };

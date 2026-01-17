@@ -39,7 +39,7 @@ type QuizContextValue = {
   resetQuiz: () => void;
 };
 
-const defaultState: QuizState = {
+export const defaultQuizState: QuizState = {
   biologicalSex: null,
   age: null,
   heightCm: null,
@@ -60,14 +60,14 @@ const defaultState: QuizState = {
 const QuizContext = createContext<QuizContextValue | undefined>(undefined);
 
 export function QuizProvider({ children }: { children: React.ReactNode }) {
-  const [quiz, setQuiz] = useState<QuizState>(defaultState);
+  const [quiz, setQuiz] = useState<QuizState>(defaultQuizState);
   const [status, setStatus] = useState<QuizStatus>('pending');
   const [saving, setSaving] = useState(false);
   const { user, refreshProfile } = useAuth();
 
   const hydrateFromProfile = React.useCallback((rawQuiz: any) => {
     if (!rawQuiz || typeof rawQuiz !== 'object') {
-      setQuiz(defaultState);
+      setQuiz(defaultQuizState);
       setStatus('pending');
       return;
     }
@@ -79,18 +79,18 @@ export function QuizProvider({ children }: { children: React.ReactNode }) {
         : 'completed';
 
     if (!payload || typeof payload !== 'object') {
-      setQuiz(defaultState);
+      setQuiz(defaultQuizState);
       setStatus('pending');
       return;
     }
 
     setQuiz((prev) => ({
       ...prev,
-      ...defaultState,
+      ...defaultQuizState,
       ...payload,
       allergens: Array.isArray(payload.allergens)
         ? payload.allergens.filter((a: unknown) => typeof a === 'string')
-        : defaultState.allergens,
+        : defaultQuizState.allergens,
     }));
     setStatus(nextStatus);
   }, []);
@@ -137,7 +137,7 @@ export function QuizProvider({ children }: { children: React.ReactNode }) {
   };
 
   const resetQuiz = () => {
-    setQuiz(defaultState);
+    setQuiz(defaultQuizState);
     setStatus('pending');
   };
 
