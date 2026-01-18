@@ -29,11 +29,17 @@ type User = {
   kind?: 'guest' | 'member';
 };
 
+export type SignUpResult = {
+  success: boolean;
+  needsEmailConfirmation: boolean;
+  message: string;
+};
+
 type AuthContextValue = {
   user: User | null;
   loading: boolean;
   signInWithEmail: (email: string, password: string) => Promise<void>;
-  signUpWithEmail: (email: string, password: string) => Promise<void>;
+  signUpWithEmail: (email: string, password: string) => Promise<SignUpResult>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   setGoal: (goal: GoalType) => Promise<void>;
@@ -94,44 +100,85 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let isMounted = true;
+    let initialSessionHandled = false;
 
-    logAuth('bootstrap: getSession()');
-    supabase.auth
-      .getSession()
-      .then(async ({ data: { session } }) => {
+    logAuth('bootstrap: setting up auth listener');
+
+    // Explicitly fetch session on mount (required for older Supabase versions
+    // that don't fire INITIAL_SESSION event)
+    const initSession = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+
+        // If already handled by onAuthStateChange, just ensure loading is false
         if (!isMounted) return;
+        if (initialSessionHandled) {
+          logAuth('bootstrap: getSession skipped (already handled by auth state change)');
+          setLoading(false);
+          return;
+        }
+
+        initialSessionHandled = true;
+        logAuth('bootstrap: getSession result', {
+          hasSession: !!session,
+          userId: session?.user?.id,
+          error: error?.message
+        });
+
         if (session?.user) {
-          logAuth('bootstrap: session found', {
+          await bootstrapUser(session.user);
+        } else {
+          setUser(null);
+        }
+      } catch (err) {
+        logAuth('bootstrap: getSession error', err);
+        if (isMounted) setUser(null);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    initSession();
+
+    // Also listen for auth state changes (sign in, sign out, token refresh)
+    const { data: subscription } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
+
+      logAuth('auth state change:', event, session?.user?.id ?? 'no user');
+
+      // Skip INITIAL_SESSION if we already handled it via getSession
+      if (event === 'INITIAL_SESSION') {
+        if (initialSessionHandled) {
+          logAuth('skipping INITIAL_SESSION (already handled)');
+          return;
+        }
+        initialSessionHandled = true;
+      }
+
+      // Mark as handled so initSession knows to skip
+      if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') {
+        initialSessionHandled = true;
+      }
+
+      try {
+        if (session?.user) {
+          logAuth('auth state change: session found', {
             id: session.user.id,
             email: session.user.email,
           });
           await bootstrapUser(session.user);
         } else {
-          logAuth('bootstrap: no session');
+          logAuth('auth state change: no session');
           setUser(null);
         }
-        setLoading(false);
-      })
-      .catch((err) => {
-        logAuth('bootstrap: getSession error', err);
-        if (!isMounted) return;
+      } catch (err) {
+        logAuth('auth state change: bootstrapUser error', err);
         setUser(null);
-        setLoading(false);
-      });
-
-    const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (!isMounted) return;
-      if (session?.user) {
-        logAuth('auth state change: session', {
-          id: session.user.id,
-          email: session.user.email,
-        });
-        await bootstrapUser(session.user);
-      } else {
-        logAuth('auth state change: signed out');
-        setUser(null);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
       }
-      setLoading(false);
     });
 
     return () => {
@@ -162,26 +209,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(false);
   };
 
-  const signUpWithEmail = async (email: string, password: string) => {
+  const signUpWithEmail = async (email: string, password: string): Promise<SignUpResult> => {
     setLoading(true);
     logAuth('signUpWithEmail start', { email });
-    const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) {
-      logAuth('signUpWithEmail error', error);
+    try {
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if (error) {
+        logAuth('signUpWithEmail error', error);
+        throw error;
+      }
+      if (data.session?.user) {
+        logAuth('signUpWithEmail success (session present)', {
+          id: data.session.user.id,
+          email: data.session.user.email,
+        });
+        await upsertProfile(data.session.user.id, data.session.user.email);
+        await bootstrapUser(data.session.user);
+        return {
+          success: true,
+          needsEmailConfirmation: false,
+          message: 'Account created successfully.',
+        };
+      } else if (data.user && !data.session) {
+        // User created but no session means email confirmation is required
+        logAuth('signUpWithEmail: email confirmation required');
+        return {
+          success: true,
+          needsEmailConfirmation: true,
+          message: 'Account created. Please check your email to confirm your account before signing in.',
+        };
+      } else {
+        logAuth('signUpWithEmail: unexpected state - no user or session');
+        return {
+          success: false,
+          needsEmailConfirmation: false,
+          message: 'Sign up failed. Please try again.',
+        };
+      }
+    } finally {
       setLoading(false);
-      throw error;
     }
-    if (data.session?.user) {
-      logAuth('signUpWithEmail success (session present)', {
-        id: data.session.user.id,
-        email: data.session.user.email,
-      });
-      await upsertProfile(data.session.user.id, data.session.user.email);
-      await bootstrapUser(data.session.user);
-    } else {
-      logAuth('signUpWithEmail: no session (likely email confirmation required)');
-    }
-    setLoading(false);
   };
 
   const refreshProfile = async () => {
