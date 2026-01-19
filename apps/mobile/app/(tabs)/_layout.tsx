@@ -47,6 +47,20 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="macros"
+        options={{
+          title: 'Macros',
+          tabBarIcon: ({ color }) => <TabBarIcon name="pie-chart" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="two"
+        options={{
+          title: 'Library',
+          tabBarIcon: ({ color }) => <TabBarIcon name="book" color={color} />,
+        }}
+      />
     </Tabs>
   );
 }

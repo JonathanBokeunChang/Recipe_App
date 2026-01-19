@@ -11,6 +11,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import { AuthProvider, useAuth } from '@/components/auth';
 import { QuizProvider, useQuiz } from '@/components/quiz-state';
 import { RecipeLibraryProvider } from '@/lib/recipe-library-context';
+import { MacroTrackingProvider } from '@/components/macro-tracking-state';
 
 export { ErrorBoundary } from 'expo-router';
 
@@ -44,9 +45,11 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <QuizProvider>
-        <RecipeLibraryProvider>
-          <RootLayoutNav />
-        </RecipeLibraryProvider>
+        <MacroTrackingProvider>
+          <RecipeLibraryProvider>
+            <RootLayoutNav />
+          </RecipeLibraryProvider>
+        </MacroTrackingProvider>
       </QuizProvider>
     </AuthProvider>
   );
@@ -75,6 +78,14 @@ function RootLayoutNav() {
   const getTargetRoute = useCallback((): string | null => {
     const inAuthGroup = segments[0] === '(auth)';
     const inQuiz = segments[0] === 'quiz';
+
+    console.log('[routing] getTargetRoute', {
+      hasUser: !!user,
+      quizStatus,
+      inAuthGroup,
+      inQuiz,
+      currentSegment: segments[0],
+    });
 
     // Not authenticated - go to sign-in
     if (!user) {
