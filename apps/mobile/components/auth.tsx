@@ -9,7 +9,7 @@ import React, {
 } from 'react';
 
 import type { QuizState } from './quiz-state';
-import { supabase, logAuthState } from '@/supabaseClient';
+import { supabase, logAuthState, restoreSession } from '@/supabaseClient';
 
 const log = (...args: any[]) => console.log('[auth]', ...args);
 
@@ -72,6 +72,7 @@ function extractGoal(profile?: Profile | null): GoalType | undefined {
 }
 
 async function fetchProfile(userId: string): Promise<Profile | null> {
+  log('fetchProfile called for:', userId);
   try {
     const { data, error } = await supabase
       .from('profiles')
@@ -83,6 +84,11 @@ async function fetchProfile(userId: string): Promise<Profile | null> {
       log('fetchProfile error:', error.message);
       return null;
     }
+    log('fetchProfile result:', {
+      hasData: !!data,
+      hasQuiz: !!data?.quiz,
+      quizStatus: data?.quiz?.status,
+    });
     return data ?? null;
   } catch (err) {
     log('fetchProfile exception:', err);
@@ -142,6 +148,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     log('Setting up auth listener');
 
+    // Immediately try to restore session (handles expired tokens)
+    restoreSession().then((session) => {
+      if (!mountedRef.current || !isInitialLoad) return;
+      if (session) {
+        log('Session restored on startup');
+        // onAuthStateChange will fire and handle setting the user
+      }
+    }).catch((err) => {
+      log('Session restore error on startup:', err);
+    });
+
     // Listen for auth state changes - this is the primary mechanism
     const { data: subscription } = supabase.auth.onAuthStateChange(
       async (event, session) => {
@@ -191,7 +208,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (isInitialLoad && mountedRef.current) {
         log('Timeout reached, checking session manually');
         try {
-          const { data: { session } } = await supabase.auth.getSession();
+          // Use restoreSession to handle expired tokens
+          const session = await restoreSession();
           if (mountedRef.current && isInitialLoad) {
             if (session?.user) {
               const userObj = await buildUser(session.user);

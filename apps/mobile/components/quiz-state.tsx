@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo, useState } from 'react';
+import React, { createContext, useContext, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/supabaseClient';
 import { useAuth } from './auth';
 
@@ -59,11 +59,25 @@ const defaultState: QuizState = {
 
 const QuizContext = createContext<QuizContextValue | undefined>(undefined);
 
+function validateQuizForCompletion(quiz: QuizState): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+
+  if (!quiz.biologicalSex) errors.push('Biological sex is required');
+  if (!quiz.age || quiz.age < 13) errors.push('Valid age is required');
+  if (!quiz.heightCm || quiz.heightCm <= 0) errors.push('Height is required');
+  if (!quiz.weightKg || quiz.weightKg <= 0) errors.push('Weight is required');
+  if (!quiz.goal) errors.push('Goal is required');
+  if (!quiz.activityLevel) errors.push('Activity level is required');
+
+  return { valid: errors.length === 0, errors };
+}
+
 export function QuizProvider({ children }: { children: React.ReactNode }) {
   const [quiz, setQuiz] = useState<QuizState>(defaultState);
   const [status, setStatus] = useState<QuizStatus>('pending');
   const [saving, setSaving] = useState(false);
   const { user, refreshProfile } = useAuth();
+  const hasLocalChanges = useRef(false);
 
   const hydrateFromProfile = React.useCallback((rawQuiz: any) => {
     if (!rawQuiz || typeof rawQuiz !== 'object') {
@@ -96,6 +110,7 @@ export function QuizProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const updateQuiz = (partial: Partial<QuizState>) => {
+    hasLocalChanges.current = true;
     setQuiz((prev) => ({ ...prev, ...partial }));
     if (status === 'pending') {
       setStatus('in_progress');
@@ -103,7 +118,11 @@ export function QuizProvider({ children }: { children: React.ReactNode }) {
   };
 
   const persistQuiz = async (nextStatus: QuizStatus, nextQuiz?: QuizState) => {
-    if (!user?.id) return;
+    console.log('[quiz] persistQuiz called', { nextStatus, userId: user?.id });
+    if (!user?.id) {
+      console.warn('[quiz] persistQuiz called without user ID');
+      throw new Error('Cannot save quiz: user not authenticated');
+    }
     setSaving(true);
     try {
       const payload = {
@@ -111,14 +130,24 @@ export function QuizProvider({ children }: { children: React.ReactNode }) {
         status: nextStatus,
         updatedAt: new Date().toISOString(),
       };
-      const { error } = await supabase.from('profiles').upsert({
+      console.log('[quiz] Upserting to Supabase...');
+      // Add timeout to prevent hanging
+      const upsertPromise = supabase.from('profiles').upsert({
         id: user.id,
         quiz: payload,
       });
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Supabase upsert timed out after 10s')), 10000)
+      );
+      const { error } = await Promise.race([upsertPromise, timeoutPromise]) as any;
+      console.log('[quiz] Supabase upsert complete', { error: error?.message });
       if (error) {
         throw error;
       }
+      hasLocalChanges.current = false;
+      console.log('[quiz] Calling refreshProfile...');
       await refreshProfile();
+      console.log('[quiz] refreshProfile complete');
     } catch (err) {
       console.warn('[quiz] Failed to persist quiz to profile', err);
       throw err;
@@ -128,7 +157,22 @@ export function QuizProvider({ children }: { children: React.ReactNode }) {
   };
 
   const completeQuiz = async () => {
-    await persistQuiz('completed');
+    console.log('[quiz] completeQuiz called', { quiz, userId: user?.id, currentStatus: status });
+
+    // If already completed, just ensure local status is set and skip the save
+    if (status === 'completed') {
+      console.log('[quiz] Quiz already completed, skipping save');
+      return;
+    }
+
+    const validation = validateQuizForCompletion(quiz);
+    if (!validation.valid) {
+      console.log('[quiz] Validation failed:', validation.errors);
+      throw new Error(`Quiz incomplete: ${validation.errors.join(', ')}`);
+    }
+
+    const quizSnapshot = { ...quiz };
+    await persistQuiz('completed', quizSnapshot);
     setStatus('completed');
   };
   const skipQuiz = async () => {
@@ -143,10 +187,28 @@ export function QuizProvider({ children }: { children: React.ReactNode }) {
 
   // Reset or hydrate quiz when user/profile changes
   React.useEffect(() => {
+    console.log('[quiz] Hydration effect triggered', {
+      userId: user?.id,
+      hasProfile: !!user?.profile,
+      hasQuiz: !!user?.profile?.quiz,
+      hasLocalChanges: hasLocalChanges.current,
+    });
+
+    // Don't overwrite local changes with stale profile data
+    if (hasLocalChanges.current) {
+      console.log('[quiz] Skipping hydration - local changes pending');
+      return;
+    }
+
     if (user?.profile?.quiz) {
+      console.log('[quiz] Hydrating from profile', user.profile.quiz);
       hydrateFromProfile(user.profile.quiz);
-    } else {
+    } else if (!user?.id) {
+      console.log('[quiz] No user - resetting quiz');
+      // Only reset if user is logged out, not just if profile.quiz is null
       resetQuiz();
+    } else {
+      console.log('[quiz] User exists but no quiz data in profile');
     }
   }, [user?.id, user?.profile?.quiz, hydrateFromProfile]);
 

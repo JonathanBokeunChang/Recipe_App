@@ -64,7 +64,7 @@ export default function QuizScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
-  const { quiz, status, updateQuiz, completeQuiz, skipQuiz } = useQuiz();
+  const { quiz, status, saving, updateQuiz, completeQuiz, skipQuiz } = useQuiz();
   const [stepIndex, setStepIndex] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const steps: StepKey[] = ['profile', 'body', 'goal', 'diet'];
@@ -89,12 +89,31 @@ export default function QuizScreen() {
   }, [currentStep, quiz]);
 
   const goNext = async () => {
+    console.log('[quiz-screen] goNext called', {
+      stepIndex,
+      isStepValid,
+      saving,
+      submitting,
+      quizState: quiz,
+    });
+
+    if (saving) {
+      console.log('[quiz-screen] Blocked - saving in progress');
+      return;
+    }
+
     if (stepIndex === steps.length - 1) {
       try {
         setSubmitting(true);
+        console.log('[quiz-screen] Calling completeQuiz...');
         await completeQuiz();
+        console.log('[quiz-screen] completeQuiz finished, navigating...');
+        // Small delay to ensure state propagation before navigation
+        await new Promise(resolve => setTimeout(resolve, 100));
         router.replace('/(tabs)');
+        console.log('[quiz-screen] Navigation called');
       } catch (err: any) {
+        console.log('[quiz-screen] completeQuiz error:', err);
         Alert.alert('Could not save quiz', err?.message ?? 'Please try again.');
       } finally {
         setSubmitting(false);
@@ -107,9 +126,13 @@ export default function QuizScreen() {
   const goBack = () => setStepIndex((idx) => Math.max(idx - 1, 0));
 
   const handleSkip = async () => {
+    if (saving) return; // Prevent double-submit
+
     try {
       setSubmitting(true);
       await skipQuiz();
+      // Small delay to ensure state propagation before navigation
+      await new Promise(resolve => setTimeout(resolve, 100));
       router.replace('/(tabs)');
     } catch (err: any) {
       Alert.alert('Could not save quiz', err?.message ?? 'Please try again.');
