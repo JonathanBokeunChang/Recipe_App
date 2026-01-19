@@ -1,54 +1,52 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack, useRootNavigationState, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { ActivityIndicator, View } from 'react-native';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { AuthProvider, useAuth } from '@/components/auth';
 import { QuizProvider, useQuiz } from '@/components/quiz-state';
+import { RecipeLibraryProvider } from '@/lib/recipe-library-context';
 
-export {
-  // Catch any errors thrown by the Layout component.
-  ErrorBoundary,
-} from 'expo-router';
+export { ErrorBoundary } from 'expo-router';
 
 export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
   initialRouteName: '(auth)',
 };
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
+// Prevent splash screen from auto-hiding before asset loading completes
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const [loaded, error] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
     ...FontAwesome.font,
   });
 
-  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
   useEffect(() => {
-    if (error) throw error;
-  }, [error]);
+    if (fontError) throw fontError;
+  }, [fontError]);
 
   useEffect(() => {
-    if (loaded) {
+    if (fontsLoaded) {
       SplashScreen.hideAsync();
     }
-  }, [loaded]);
+  }, [fontsLoaded]);
 
-  if (!loaded) {
+  if (!fontsLoaded) {
     return null;
   }
 
   return (
     <AuthProvider>
       <QuizProvider>
-        <RootLayoutNav />
+        <RecipeLibraryProvider>
+          <RootLayoutNav />
+        </RecipeLibraryProvider>
       </QuizProvider>
     </AuthProvider>
   );
@@ -61,35 +59,104 @@ function RootLayoutNav() {
   const segments = useSegments();
   const router = useRouter();
   const navigationState = useRootNavigationState();
-  const [isNavigationReady, setIsNavigationReady] = useState(false);
 
+  const [isNavigationReady, setIsNavigationReady] = useState(false);
+  const hasNavigatedRef = useRef(false);
+  const lastUserIdRef = useRef<string | null>(null);
+
+  // Track navigation readiness
   useEffect(() => {
     if (navigationState?.key && navigationState.routes?.length) {
       setIsNavigationReady(true);
     }
   }, [navigationState?.key, navigationState?.routes?.length]);
 
-  useEffect(() => {
-    if (!isNavigationReady || authLoading) return; // wait for nav + auth
+  // Determine the correct route based on auth and quiz state
+  const getTargetRoute = useCallback((): string | null => {
     const inAuthGroup = segments[0] === '(auth)';
     const inQuiz = segments[0] === 'quiz';
 
-    if (!user && !inAuthGroup) {
-      router.replace('/(auth)/sign-in');
+    // Not authenticated - go to sign-in
+    if (!user) {
+      if (!inAuthGroup) {
+        return '/(auth)/sign-in';
+      }
+      return null; // Already in auth, no navigation needed
     }
-    if (user && quizStatus !== 'completed' && quizStatus !== 'skipped' && !inQuiz) {
-      router.replace('/quiz');
-      return;
-    }
-    if (user && inAuthGroup) {
-      router.replace('/(tabs)');
-    }
-  }, [user, segments, router, isNavigationReady, quizStatus, authLoading]);
 
+    // Authenticated - check quiz status
+    const quizComplete = quizStatus === 'completed' || quizStatus === 'skipped';
+
+    if (!quizComplete) {
+      // Need to complete quiz
+      if (!inQuiz) {
+        return '/quiz';
+      }
+      return null; // Already in quiz
+    }
+
+    // Authenticated with complete quiz - go to main app
+    if (inAuthGroup) {
+      return '/(tabs)';
+    }
+
+    return null; // Already in the right place
+  }, [user, quizStatus, segments]);
+
+  // Handle navigation based on auth state
+  useEffect(() => {
+    // Wait for navigation to be ready and auth to finish loading
+    if (!isNavigationReady || authLoading) return;
+
+    // Detect user change (sign in/out)
+    const currentUserId = user?.id ?? null;
+    const userChanged = currentUserId !== lastUserIdRef.current;
+    lastUserIdRef.current = currentUserId;
+
+    // If user changed, reset navigation flag to allow new navigation
+    if (userChanged) {
+      hasNavigatedRef.current = false;
+    }
+
+    const targetRoute = getTargetRoute();
+
+    if (targetRoute && !hasNavigatedRef.current) {
+      hasNavigatedRef.current = true;
+      // Use setTimeout to ensure navigation happens after render
+      setTimeout(() => {
+        router.replace(targetRoute as any);
+      }, 0);
+    }
+  }, [
+    isNavigationReady,
+    authLoading,
+    user?.id,
+    quizStatus,
+    segments,
+    router,
+    getTargetRoute,
+  ]);
+
+  // Reset navigation flag when segments change (user navigated manually)
+  useEffect(() => {
+    hasNavigatedRef.current = false;
+  }, [segments[0]]);
+
+  // Show loading state while initializing
   if (!isNavigationReady || authLoading) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator />
+      <View
+        style={{
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: colorScheme === 'dark' ? '#000' : '#fff',
+        }}
+      >
+        <ActivityIndicator
+          size="large"
+          color={colorScheme === 'dark' ? '#fff' : '#000'}
+        />
       </View>
     );
   }

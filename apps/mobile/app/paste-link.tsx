@@ -6,6 +6,10 @@ import { Text, View } from '@/components/Themed';
 import { API_BASE_URL } from '@/constants/api';
 import { useColorScheme } from '@/components/useColorScheme';
 import { useAuth } from '@/components/auth';
+import { useQuiz } from '@/components/quiz-state';
+import { saveRecipeToLibrary } from '@/lib/recipe-library';
+import { useRecipeLibrary } from '@/lib/recipe-library-context';
+import { logAuthState } from '@/supabaseClient';
 
 type VideoSource = 'tiktok';
 
@@ -59,6 +63,7 @@ export default function PasteLinkScreen() {
   const isDark = colorScheme === 'dark';
   const { user } = useAuth();
   const { quiz } = useQuiz();
+  const { triggerRefresh } = useRecipeLibrary();
 
   const [input, setInput] = React.useState('');
   const [status, setStatus] = React.useState<
@@ -180,36 +185,122 @@ export default function PasteLinkScreen() {
   };
 
   const saveRecipe = async () => {
-    if (!resultPreview || !user?.id) return;
+    console.log('[paste-link] ========== SAVE BUTTON PRESSED ==========');
+    console.log('[paste-link] Current state:', {
+      saveStatus,
+      hasResultPreview: !!resultPreview,
+      hasUser: !!user,
+      userId: user?.id,
+      userEmail: user?.email,
+      hasModifiedRecipe: !!modifiedRecipe,
+    });
 
+    // Check actual Supabase auth state before saving
+    await logAuthState('save-button-pressed');
+
+    // Prevent double-clicks while actively saving
+    if (saveStatus === 'saving') {
+      console.log('[paste-link] Already saving, ignoring click');
+      return;
+    }
+    if (!resultPreview) {
+      console.log('[paste-link] No resultPreview, cannot save');
+      setSaveMessage('No recipe to save');
+      setSaveStatus('error');
+      return;
+    }
+    if (!user?.id) {
+      console.log('[paste-link] No user.id, cannot save');
+      setSaveMessage('Please sign in to save recipes');
+      setSaveStatus('error');
+      return;
+    }
+
+    // Reset to saving state (allows re-saving)
     setSaveStatus('saving');
     setSaveMessage(null);
+    console.log('[paste-link] Set status to saving, starting save...');
+
+    // Log what we're about to save
+    const saveParams = {
+      userId: user.id,
+      title:
+        modifiedRecipe?.modifiedRecipe?.title ??
+        modifiedRecipe?.title ??
+        resultPreview?.title ??
+        'Recipe',
+      sourceUrl: normalizedUrl ?? input,
+      videoUrl: normalizedUrl ?? input,
+      goalType: modifiedRecipe?.goalType ?? user.goal ?? null,
+      originalRecipe: resultPreview,
+      modifiedRecipe: modifiedRecipe ?? undefined,
+    };
+
+    console.log('[paste-link] Save params:', {
+      userId: saveParams.userId,
+      title: saveParams.title,
+      sourceUrl: saveParams.sourceUrl,
+      videoUrl: saveParams.videoUrl,
+      goalType: saveParams.goalType,
+      originalRecipeTitle: saveParams.originalRecipe?.title,
+      originalRecipeIngredientCount: saveParams.originalRecipe?.ingredients?.length,
+      hasModifiedRecipe: !!saveParams.modifiedRecipe,
+    });
 
     try {
-      await saveRecipeToLibrary({
-        userId: user.id,
-        title:
-          modifiedRecipe?.modifiedRecipe?.title ??
-          modifiedRecipe?.title ??
-          resultPreview?.title ??
-          'Recipe',
-        videoUrl: normalizedUrl ?? input,
-        goalType: modifiedRecipe?.goalType ?? user.goal ?? null,
-        originalRecipe: resultPreview,
-        modifiedRecipe: modifiedRecipe ?? undefined,
-      });
+      console.log('[paste-link] Calling saveRecipeToLibrary...');
+      const startTime = Date.now();
+      const result = await saveRecipeToLibrary(saveParams);
+      const duration = Date.now() - startTime;
+      console.log('[paste-link] saveRecipeToLibrary returned in', duration, 'ms');
+      console.log('[paste-link] Result:', result);
+
       setSaveStatus('saved');
       setSaveMessage('Saved to your library.');
+      console.log('[paste-link] Save SUCCESS!');
+      triggerRefresh();
     } catch (err: any) {
+      console.error('[paste-link] Save FAILED:', err);
+      console.error('[paste-link] Error details:', {
+        message: err?.message,
+        name: err?.name,
+        stack: err?.stack,
+      });
       setSaveStatus('error');
       setSaveMessage(err?.message || 'Failed to save recipe');
     }
+
+    console.log('[paste-link] ========== SAVE COMPLETE ==========');
   };
 
+  // Reset save status when a new recipe is loaded or when modified recipe changes
+  // Use a stable reference to detect actual content changes
+  const recipeKey = React.useMemo(() => {
+    if (!resultPreview) return null;
+    return JSON.stringify({
+      title: resultPreview.title,
+      ingredientCount: resultPreview.ingredients?.length,
+      modified: modifiedRecipe ? {
+        goalType: modifiedRecipe.goalType,
+        editCount: modifiedRecipe.edits?.length,
+      } : null,
+    });
+  }, [resultPreview, modifiedRecipe]);
+
   React.useEffect(() => {
+    console.log('[paste-link] recipeKey changed, resetting save status to idle');
     setSaveStatus('idle');
     setSaveMessage(null);
-  }, [resultPreview?.title, modifiedRecipe?.goalType]);
+  }, [recipeKey]);
+
+  // Debug: log when user changes
+  React.useEffect(() => {
+    console.log('[paste-link] user changed:', {
+      hasUser: !!user,
+      userId: user?.id,
+      email: user?.email,
+    });
+  }, [user]);
 
   React.useEffect(() => {
     if (!jobId) return;
@@ -343,16 +434,16 @@ export default function PasteLinkScreen() {
                 <Pressable
                   style={[
                     styles.saveButton,
-                    (saveStatus === 'saving' || saveStatus === 'saved') && styles.primaryDisabled,
+                    saveStatus === 'saving' && styles.primaryDisabled,
                   ]}
                   onPress={saveRecipe}
-                  disabled={saveStatus === 'saving' || saveStatus === 'saved'}
+                  disabled={saveStatus === 'saving'}
                 >
                   {saveStatus === 'saving' ? (
                     <ActivityIndicator color="#F9FAFB" />
                   ) : (
                     <Text style={styles.saveButtonText}>
-                      {saveStatus === 'saved' ? 'Saved' : 'Save to library'}
+                      {saveStatus === 'saved' ? 'Save again' : 'Save to library'}
                     </Text>
                   )}
                 </Pressable>

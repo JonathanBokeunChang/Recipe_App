@@ -1,12 +1,21 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  useCallback,
+  useRef,
+} from 'react';
 
 import type { QuizState } from './quiz-state';
-import { supabase } from '@/supabaseClient';
+import { supabase, logAuthState } from '@/supabaseClient';
 
-const logAuth = (...args: any[]) => {
-  // eslint-disable-next-line no-console
-  console.log('[auth]', ...args);
-};
+const log = (...args: any[]) => console.log('[auth]', ...args);
+
+// ============================================================================
+// Types
+// ============================================================================
 
 export type GoalType = 'bulk' | 'lean_bulk' | 'cut';
 type QuizStatus = 'pending' | 'in_progress' | 'completed' | 'skipped';
@@ -26,7 +35,7 @@ type User = {
   email?: string;
   profile?: Profile | null;
   goal?: GoalType;
-  kind?: 'guest' | 'member';
+  kind: 'guest' | 'member';
 };
 
 export type SignUpResult = {
@@ -47,6 +56,10 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
 function extractGoal(profile?: Profile | null): GoalType | undefined {
   const fromQuiz = profile?.quiz?.state?.goal;
   if (fromQuiz === 'bulk' || fromQuiz === 'lean_bulk' || fromQuiz === 'cut') {
@@ -59,253 +72,341 @@ function extractGoal(profile?: Profile | null): GoalType | undefined {
 }
 
 async function fetchProfile(userId: string): Promise<Profile | null> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', userId)
-    .maybeSingle();
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
 
-  if (error) {
-    console.warn('[auth] Failed to fetch profile', error);
+    if (error) {
+      log('fetchProfile error:', error.message);
+      return null;
+    }
+    return data ?? null;
+  } catch (err) {
+    log('fetchProfile exception:', err);
     return null;
   }
-  return data ?? null;
 }
 
-async function upsertProfile(userId: string, email?: string | null) {
-  const { error } = await supabase.from('profiles').upsert({
-    id: userId,
-    email: email ?? undefined,
-  });
-  if (error) {
-    console.warn('[auth] Failed to upsert profile', error);
+async function upsertProfile(userId: string, email?: string | null): Promise<boolean> {
+  try {
+    const { error } = await supabase.from('profiles').upsert({
+      id: userId,
+      email: email ?? undefined,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) {
+      log('upsertProfile error:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    log('upsertProfile exception:', err);
+    return false;
   }
 }
+
+// ============================================================================
+// AuthProvider Component
+// ============================================================================
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
 
-  const bootstrapUser = async (sessionUser: { id: string; email?: string | null }) => {
-    const profile = await fetchProfile(sessionUser.id);
-    const goal = extractGoal(profile);
-    setUser({
-      id: sessionUser.id,
-      email: sessionUser.email ?? undefined,
-      profile,
-      goal,
-      kind: 'member',
-    });
-  };
+  // Track if component is mounted to prevent state updates after unmount
+  const mountedRef = useRef(true);
 
+  // Build user object from session user + profile
+  const buildUser = useCallback(
+    async (sessionUser: { id: string; email?: string | null }): Promise<User> => {
+      const profile = await fetchProfile(sessionUser.id);
+      const goal = extractGoal(profile);
+      return {
+        id: sessionUser.id,
+        email: sessionUser.email ?? undefined,
+        profile,
+        goal,
+        kind: 'member',
+      };
+    },
+    []
+  );
+
+  // Initialize auth state on mount
   useEffect(() => {
-    let isMounted = true;
-    let initialSessionHandled = false;
+    mountedRef.current = true;
+    let isInitialLoad = true;
 
-    logAuth('bootstrap: setting up auth listener');
+    log('Setting up auth listener');
 
-    // Explicitly fetch session on mount (required for older Supabase versions
-    // that don't fire INITIAL_SESSION event)
-    const initSession = async () => {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession();
+    // Listen for auth state changes - this is the primary mechanism
+    const { data: subscription } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (!mountedRef.current) return;
 
-        // If already handled by onAuthStateChange, just ensure loading is false
-        if (!isMounted) return;
-        if (initialSessionHandled) {
-          logAuth('bootstrap: getSession skipped (already handled by auth state change)');
-          setLoading(false);
-          return;
-        }
-
-        initialSessionHandled = true;
-        logAuth('bootstrap: getSession result', {
-          hasSession: !!session,
-          userId: session?.user?.id,
-          error: error?.message
-        });
+        log('onAuthStateChange:', event, session?.user?.id ?? 'no user');
 
         if (session?.user) {
-          await bootstrapUser(session.user);
+          // User is signed in
+          try {
+            const userObj = await buildUser(session.user);
+            if (mountedRef.current) {
+              setUser(userObj);
+              log('User set:', userObj.id);
+            }
+          } catch (err) {
+            log('Error building user:', err);
+            if (mountedRef.current) {
+              // Still set a basic user even if profile fetch fails
+              setUser({
+                id: session.user.id,
+                email: session.user.email ?? undefined,
+                profile: null,
+                goal: undefined,
+                kind: 'member',
+              });
+            }
+          }
         } else {
-          setUser(null);
+          // No session - user is signed out
+          if (mountedRef.current) {
+            setUser(null);
+          }
         }
-      } catch (err) {
-        logAuth('bootstrap: getSession error', err);
-        if (isMounted) setUser(null);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    };
 
-    initSession();
-
-    // Also listen for auth state changes (sign in, sign out, token refresh)
-    const { data: subscription } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!isMounted) return;
-
-      logAuth('auth state change:', event, session?.user?.id ?? 'no user');
-
-      // Skip INITIAL_SESSION if we already handled it via getSession
-      if (event === 'INITIAL_SESSION') {
-        if (initialSessionHandled) {
-          logAuth('skipping INITIAL_SESSION (already handled)');
-          return;
-        }
-        initialSessionHandled = true;
-      }
-
-      // Mark as handled so initSession knows to skip
-      if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') {
-        initialSessionHandled = true;
-      }
-
-      try {
-        if (session?.user) {
-          logAuth('auth state change: session found', {
-            id: session.user.id,
-            email: session.user.email,
-          });
-          await bootstrapUser(session.user);
-        } else {
-          logAuth('auth state change: no session');
-          setUser(null);
-        }
-      } catch (err) {
-        logAuth('auth state change: bootstrapUser error', err);
-        setUser(null);
-      } finally {
-        if (isMounted) {
+        // Mark loading as complete after first auth state change
+        if (isInitialLoad && mountedRef.current) {
+          isInitialLoad = false;
           setLoading(false);
+          log('Initial auth complete, loading=false');
         }
       }
-    });
+    );
+
+    // Fallback: if onAuthStateChange doesn't fire within 3 seconds, check manually
+    const timeoutId = setTimeout(async () => {
+      if (isInitialLoad && mountedRef.current) {
+        log('Timeout reached, checking session manually');
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (mountedRef.current && isInitialLoad) {
+            if (session?.user) {
+              const userObj = await buildUser(session.user);
+              setUser(userObj);
+            } else {
+              setUser(null);
+            }
+            isInitialLoad = false;
+            setLoading(false);
+            log('Manual session check complete');
+          }
+        } catch (err) {
+          log('Manual session check error:', err);
+          if (mountedRef.current && isInitialLoad) {
+            setUser(null);
+            isInitialLoad = false;
+            setLoading(false);
+          }
+        }
+      }
+    }, 3000);
 
     return () => {
-      isMounted = false;
+      mountedRef.current = false;
       subscription?.subscription.unsubscribe();
+      clearTimeout(timeoutId);
     };
-  }, []);
+  }, [buildUser]);
 
-  const signInWithEmail = async (email: string, password: string) => {
-    setLoading(true);
-    logAuth('signInWithEmail start', { email });
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      logAuth('signInWithEmail error', error);
-      setLoading(false);
-      throw error;
-    }
-    if (data.session?.user) {
-      logAuth('signInWithEmail success', {
-        id: data.session.user.id,
-        email: data.session.user.email,
-      });
-      await upsertProfile(data.session.user.id, data.session.user.email);
-      await bootstrapUser(data.session.user);
-    } else {
-      logAuth('signInWithEmail: no session returned');
-    }
-    setLoading(false);
-  };
+  // Sign in with email and password
+  const signInWithEmail = useCallback(
+    async (email: string, password: string): Promise<void> => {
+      log('signInWithEmail: starting', { email });
+      setLoading(true);
 
-  const signUpWithEmail = async (email: string, password: string): Promise<SignUpResult> => {
-    setLoading(true);
-    logAuth('signUpWithEmail start', { email });
-    try {
-      const { data, error } = await supabase.auth.signUp({ email, password });
-      if (error) {
-        logAuth('signUpWithEmail error', error);
-        throw error;
-      }
-      if (data.session?.user) {
-        logAuth('signUpWithEmail success (session present)', {
-          id: data.session.user.id,
-          email: data.session.user.email,
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
         });
+
+        if (error) {
+          log('signInWithEmail error:', error.message);
+          setLoading(false);
+          throw error;
+        }
+
+        if (!data.session?.user) {
+          setLoading(false);
+          throw new Error('Sign in failed: no session returned');
+        }
+
+        log('signInWithEmail: success', { userId: data.session.user.id });
+
+        // Ensure profile exists
         await upsertProfile(data.session.user.id, data.session.user.email);
-        await bootstrapUser(data.session.user);
-        return {
-          success: true,
-          needsEmailConfirmation: false,
-          message: 'Account created successfully.',
-        };
-      } else if (data.user && !data.session) {
-        // User created but no session means email confirmation is required
-        logAuth('signUpWithEmail: email confirmation required');
-        return {
-          success: true,
-          needsEmailConfirmation: true,
-          message: 'Account created. Please check your email to confirm your account before signing in.',
-        };
-      } else {
-        logAuth('signUpWithEmail: unexpected state - no user or session');
+
+        // onAuthStateChange will handle setting the user, but we need to set loading false
+        // since the isInitialLoad flag is already false after initial mount
+        setLoading(false);
+
+        await logAuthState('after-signIn');
+      } catch (err) {
+        setLoading(false);
+        throw err;
+      }
+    },
+    []
+  );
+
+  // Sign up with email and password
+  const signUpWithEmail = useCallback(
+    async (email: string, password: string): Promise<SignUpResult> => {
+      log('signUpWithEmail: starting', { email });
+      setLoading(true);
+
+      try {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+        });
+
+        if (error) {
+          log('signUpWithEmail error:', error.message);
+          setLoading(false);
+          throw error;
+        }
+
+        // Check if email confirmation is required
+        if (data.user && !data.session) {
+          log('signUpWithEmail: email confirmation required');
+          setLoading(false);
+          return {
+            success: true,
+            needsEmailConfirmation: true,
+            message:
+              'Account created! Please check your email to confirm your account before signing in.',
+          };
+        }
+
+        // Instant sign in (no email confirmation required)
+        if (data.session?.user) {
+          log('signUpWithEmail: success with immediate session', {
+            userId: data.session.user.id,
+          });
+
+          await upsertProfile(data.session.user.id, data.session.user.email);
+          // onAuthStateChange will handle setting the user, but we need to set loading false
+          setLoading(false);
+
+          return {
+            success: true,
+            needsEmailConfirmation: false,
+            message: 'Account created successfully!',
+          };
+        }
+
+        // Unexpected state
+        log('signUpWithEmail: unexpected response', data);
+        setLoading(false);
         return {
           success: false,
           needsEmailConfirmation: false,
           message: 'Sign up failed. Please try again.',
         };
+      } catch (err) {
+        setLoading(false);
+        throw err;
       }
-    } finally {
+    },
+    []
+  );
+
+  // Sign out
+  const signOut = useCallback(async (): Promise<void> => {
+    log('signOut: starting');
+    setLoading(true);
+
+    try {
+      await supabase.auth.signOut();
+      // onAuthStateChange will handle clearing the user
+      log('signOut: complete');
+    } catch (err) {
+      log('signOut error:', err);
+      // Force clear user state even if signOut fails
+      setUser(null);
       setLoading(false);
     }
-  };
+  }, []);
 
-  const refreshProfile = async () => {
-    const currentUser = user?.id;
-    if (!currentUser) return;
-    const profile = await fetchProfile(currentUser);
-    const goal = extractGoal(profile);
-    setUser((prev) =>
-      prev
-        ? {
-            ...prev,
-            profile,
-            goal: goal ?? prev.goal,
-          }
-        : prev,
-    );
-  };
-
-  const signOut = async () => {
-    setLoading(true);
-    logAuth('signOut start');
-    await supabase.auth.signOut();
-    setUser(null);
-    logAuth('signOut done');
-    setLoading(false);
-  };
-
-  const setGoal = async (goal: GoalType) => {
+  // Refresh profile from database
+  const refreshProfile = useCallback(async (): Promise<void> => {
     if (!user?.id) return;
 
-    const existingState = user.profile?.quiz?.state;
-    const nextQuiz: NonNullable<Profile['quiz']> = {
-      state: existingState ? { ...existingState, goal } : { goal } as QuizState,
-      status: user.profile?.quiz?.status ?? 'completed',
-      updatedAt: new Date().toISOString(),
-    };
+    log('refreshProfile: starting', { userId: user.id });
+    const profile = await fetchProfile(user.id);
+    const goal = extractGoal(profile);
 
     setUser((prev) => {
       if (!prev) return prev;
       return {
         ...prev,
-        goal,
-        profile: prev.profile ? { ...prev.profile, quiz: nextQuiz } : prev.profile,
+        profile,
+        goal: goal ?? prev.goal,
       };
     });
+    log('refreshProfile: complete');
+  }, [user?.id]);
 
-    const { error } = await supabase.from('profiles').upsert({
-      id: user.id,
-      quiz: nextQuiz,
-    });
-    if (error) {
-      console.warn('[auth] Failed to persist goal to profile', error);
-    } else {
-      await refreshProfile();
-    }
-  };
+  // Update user goal
+  const setGoal = useCallback(
+    async (goal: GoalType): Promise<void> => {
+      if (!user?.id) return;
 
+      log('setGoal: starting', { goal });
+
+      // Optimistically update local state
+      const existingState = user.profile?.quiz?.state;
+      const nextQuiz = {
+        state: existingState ? { ...existingState, goal } : ({ goal } as QuizState),
+        status: (user.profile?.quiz?.status ?? 'completed') as QuizStatus,
+        updatedAt: new Date().toISOString(),
+      };
+
+      setUser((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          goal,
+          profile: prev.profile
+            ? { ...prev.profile, quiz: nextQuiz }
+            : prev.profile,
+        };
+      });
+
+      // Persist to database
+      try {
+        const { error } = await supabase.from('profiles').upsert({
+          id: user.id,
+          quiz: nextQuiz,
+        });
+
+        if (error) {
+          log('setGoal: persist error', error.message);
+        } else {
+          await refreshProfile();
+        }
+      } catch (err) {
+        log('setGoal: exception', err);
+      }
+    },
+    [user?.id, user?.profile?.quiz, refreshProfile]
+  );
+
+  // Memoize context value
   const value = useMemo(
     () => ({
       user,
@@ -316,13 +417,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       refreshProfile,
       setGoal,
     }),
-    [user, loading],
+    [user, loading, signInWithEmail, signUpWithEmail, signOut, refreshProfile, setGoal]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-export function useAuth() {
+// ============================================================================
+// Hook
+// ============================================================================
+
+export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) {
     throw new Error('useAuth must be used within AuthProvider');

@@ -28,10 +28,13 @@ for (const candidate of candidates) {
 export const envInfo = { tried, loaded };
 
 export function logEnvStatus() {
-  const keyStatus = process.env.OPENAI_API_KEY ? 'set' : 'missing';
-  const fdcStatus = process.env.FDC_API_KEY ? 'set' : 'missing';
+  const geminiStatus = process.env.GEMINI_API_KEY ? 'set' : 'missing';
+  const fdcStatus = process.env.FDC_API_KEY ? 'set' : 'missing (macro estimation will be limited)';
   const loadedMsg = loaded.length ? loaded.join(', ') : 'none';
   console.info(
-    `[env] OPENAI_API_KEY: ${keyStatus} | FDC_API_KEY: ${fdcStatus} | loaded: ${loadedMsg} | cwd: ${cwd}`
+    `[env] GEMINI_API_KEY: ${geminiStatus} | FDC_API_KEY: ${fdcStatus} | loaded: ${loadedMsg} | cwd: ${cwd}`
   );
+  if (!process.env.GEMINI_API_KEY) {
+    console.warn('[env] WARNING: GEMINI_API_KEY is required for video processing. Set it in services/api/.env');
+  }
 }

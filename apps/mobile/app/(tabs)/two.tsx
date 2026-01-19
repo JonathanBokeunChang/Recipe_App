@@ -13,8 +13,11 @@ import {
   fetchRecipeDocument,
   fetchSavedRecipes,
   type RecipeDocument,
-  type SavedRecipeRow,
+  type SavedRecipeSummary,
 } from '@/lib/recipe-library';
+import { useRecipeLibrary } from '@/lib/recipe-library-context';
+
+const log = (...args: any[]) => console.log('[Library]', ...args);
 
 function formatDate(input: string) {
   const date = new Date(input);
@@ -22,7 +25,7 @@ function formatDate(input: string) {
   return date.toLocaleDateString();
 }
 
-function formatMacros(macros?: SavedRecipeRow['macros']) {
+function formatMacros(macros?: SavedRecipeSummary['macros']) {
   if (!macros) return 'Macros pending';
   const parts: string[] = [];
   if (macros.calories != null) parts.push(`${macros.calories} cal`);
@@ -34,45 +37,87 @@ function formatMacros(macros?: SavedRecipeRow['macros']) {
 
 export default function TabTwoScreen() {
   const { user } = useAuth();
-  const [recipes, setRecipes] = React.useState<SavedRecipeRow[]>([]);
-  const [selected, setSelected] = React.useState<SavedRecipeRow | null>(null);
+  const { refreshKey } = useRecipeLibrary();
+  const [recipes, setRecipes] = React.useState<SavedRecipeSummary[]>([]);
+  const [selected, setSelected] = React.useState<SavedRecipeSummary | null>(null);
   const [selectedDoc, setSelectedDoc] = React.useState<RecipeDocument | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [detailLoading, setDetailLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   const loadRecipes = React.useCallback(async () => {
-    if (!user?.id) return;
+    log('========== LOAD RECIPES START ==========');
+    log('loadRecipes called, user?.id =', user?.id);
+
+    if (!user?.id) {
+      log('No user.id, skipping fetch');
+      return;
+    }
+
     setLoading(true);
     setError(null);
+    log('Set loading=true, fetching recipes...');
+
     try {
+      const startTime = Date.now();
       const data = await fetchSavedRecipes(user.id);
+      const duration = Date.now() - startTime;
+
+      log('Fetch completed in', duration, 'ms');
+      log('Fetched', data.length, 'recipes');
+      if (data.length > 0) {
+        log('First recipe:', data[0]);
+      }
+
       setRecipes(data);
+      log('Recipes state updated');
     } catch (err: any) {
+      log('Fetch FAILED:', err?.message);
+      console.error('[Library] Full error:', err);
       setError(err?.message || 'Failed to load saved recipes');
     } finally {
       setLoading(false);
+      log('========== LOAD RECIPES COMPLETE ==========');
     }
   }, [user?.id]);
 
-  const loadRecipeDetail = React.useCallback(async (row: SavedRecipeRow) => {
+  const loadRecipeDetail = React.useCallback(async (row: SavedRecipeSummary) => {
+    log('========== LOAD RECIPE DETAIL START ==========');
+    log('loadRecipeDetail called for recipe:', row.id, row.title);
+
+    if (!user?.id) {
+      log('No user.id, skipping detail fetch');
+      return;
+    }
+
     setSelected(row);
     setSelectedDoc(null);
     setDetailLoading(true);
     setError(null);
+
     try {
-      const doc = await fetchRecipeDocument(row.storagePath);
+      const startTime = Date.now();
+      const doc = await fetchRecipeDocument(row.id, user.id);
+      const duration = Date.now() - startTime;
+
+      log('Document fetched in', duration, 'ms');
+      log('Document:', doc ? { title: doc.title, goalType: doc.goalType, createdAt: doc.createdAt } : null);
+
       setSelectedDoc(doc);
     } catch (err: any) {
+      log('Fetch FAILED:', err?.message);
+      console.error('[Library] Full error:', err);
       setError(err?.message || 'Failed to load recipe');
     } finally {
       setDetailLoading(false);
+      log('========== LOAD RECIPE DETAIL COMPLETE ==========');
     }
-  }, []);
+  }, [user?.id]);
 
   React.useEffect(() => {
+    log('Library useEffect triggered, calling loadRecipes (refreshKey:', refreshKey, ')');
     loadRecipes();
-  }, [loadRecipes]);
+  }, [loadRecipes, refreshKey]);
 
   return (
     <ScrollView
@@ -116,7 +161,9 @@ export default function TabTwoScreen() {
           </View>
           <Text style={styles.recipeTitle}>{recipe.title}</Text>
           <Text style={styles.metaText}>{formatMacros(recipe.macros)}</Text>
-          {recipe.videoUrl ? <Text style={styles.metaText}>{recipe.videoUrl}</Text> : null}
+          {recipe.sourceUrl || recipe.videoUrl ? (
+            <Text style={styles.metaText}>{recipe.sourceUrl ?? recipe.videoUrl}</Text>
+          ) : null}
         </Pressable>
       ))}
 

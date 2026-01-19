@@ -3,10 +3,12 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web"
+    "start": "concurrently \"npm run api\" \"expo start\"",
+    "start:expo": "expo start",
+    "api": "cd ../../services/api && npm run dev",
+    "android": "concurrently \"npm run api\" \"expo start --android\"",
+    "ios": "concurrently \"npm run api\" \"expo start --ios\"",
+    "web": "concurrently \"npm run api\" \"expo start --web\""
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -32,6 +34,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
+    "concurrently": "^9.2.1",
     "react-test-renderer": "19.1.0",
     "typescript": "~5.9.2"
   },
