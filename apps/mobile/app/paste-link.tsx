@@ -195,9 +195,6 @@ export default function PasteLinkScreen() {
       hasModifiedRecipe: !!modifiedRecipe,
     });
 
-    // Check actual Supabase auth state before saving
-    await logAuthState('save-button-pressed');
-
     // Prevent double-clicks while actively saving
     if (saveStatus === 'saving') {
       console.log('[paste-link] Already saving, ignoring click');
@@ -216,10 +213,15 @@ export default function PasteLinkScreen() {
       return;
     }
 
-    // Reset to saving state (allows re-saving)
+    // Reset to saving state (allows re-saving) before any network calls
     setSaveStatus('saving');
     setSaveMessage(null);
     console.log('[paste-link] Set status to saving, starting save...');
+
+    // Check actual Supabase auth state before saving (fire-and-forget so UI is responsive)
+    logAuthState('save-button-pressed').catch((err) => {
+      console.error('[paste-link] logAuthState failed:', err);
+    });
 
     // Log what we're about to save
     const saveParams = {

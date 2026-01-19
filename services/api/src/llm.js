@@ -2,6 +2,9 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GoogleAIFileManager } from '@google/generative-ai/server';
 import './env.js';
 import { buildModificationPrompt } from './goals.js';
+import { buildSubstitutionPlan } from './substitutions/engine.js';
+import { estimateMacros } from './macros.js';
+import { hasFdcKey } from './fdc.js';
 
 export async function generateRecipeFromVideo({ videoPath, url }) {
   const config = getLlmConfig();
@@ -147,11 +150,39 @@ function getLlmConfig() {
  */
 export async function modifyRecipeForGoal(recipe, goalType, userContext = {}) {
   const config = getLlmConfig();
+  const totalStart = Date.now();
+  let macroMs = 0;
+  let substitutionMs = 0;
+  let geminiMs = 0;
 
   try {
     console.info('[llm] modifying recipe for goal:', goalType);
     console.info('[llm] recipe title:', recipe.title);
     console.info('[llm] current macros:', JSON.stringify(recipe.macros));
+
+    let substitutionPlan = {
+      ingredients: [],
+      warnings: ['FDC_API_KEY missing; substitutions limited to portion tweaks.'],
+      assumptions: [],
+    };
+
+    if (hasFdcKey()) {
+      try {
+        const macroStart = Date.now();
+        const macroEstimate = await estimateMacros(recipe, {
+          includeYieldFactors: true,
+          recipeSteps: recipe.steps || [],
+        });
+        macroMs = Date.now() - macroStart;
+
+        const substitutionStart = Date.now();
+        substitutionPlan = await buildSubstitutionPlan(recipe, goalType, userContext, macroEstimate);
+        substitutionMs = Date.now() - substitutionStart;
+      } catch (err) {
+        console.warn('[llm] substitution plan failed:', err?.message);
+        substitutionPlan.warnings = [`Substitution plan unavailable: ${err?.message ?? 'unknown error'}`];
+      }
+    }
 
     const genAI = createClient();
     const model = genAI.getGenerativeModel({
@@ -162,8 +193,10 @@ export async function modifyRecipeForGoal(recipe, goalType, userContext = {}) {
       }
     });
 
-    const prompt = buildModificationPrompt(recipe, goalType, userContext);
+    const prompt = buildModificationPrompt(recipe, goalType, userContext, substitutionPlan);
+    const geminiStart = Date.now();
     const result = await model.generateContent(prompt);
+    geminiMs = Date.now() - geminiStart;
     const response = result.response;
     const message = response.text();
 
@@ -172,11 +205,19 @@ export async function modifyRecipeForGoal(recipe, goalType, userContext = {}) {
     }
 
     const parsed = JSON.parse(message);
+    parsed.substitutionPlan = substitutionPlan;
 
     // Log the results
     console.info('[llm] recipe modified successfully');
     console.info('[llm] edits made:', parsed.edits?.length || 0);
     console.info('[llm] new macros:', JSON.stringify(parsed.summary?.newMacros));
+    const totalMs = Date.now() - totalStart;
+    console.info('[llm] timings (ms):', {
+      macro: macroMs,
+      substitution: substitutionMs,
+      gemini: geminiMs,
+      total: totalMs,
+    });
 
     return parsed;
 

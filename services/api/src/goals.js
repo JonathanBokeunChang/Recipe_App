@@ -38,15 +38,21 @@ export const GOAL_CONFIGS = {
 
 /**
  * Build the modification prompt with strict target matching requirements.
- * Accepts optional user context (quiz answers) to honor constraints.
+ * Accepts optional user context (quiz answers) to honor constraints and substitution plan.
  */
-export function buildModificationPrompt(recipe, goalType, userContext = {}) {
+export function buildModificationPrompt(
+  recipe,
+  goalType,
+  userContext = {},
+  substitutionPlan = null
+) {
   const config = GOAL_CONFIGS[goalType];
   if (!config) {
     throw new Error(`Invalid goal type: ${goalType}`);
   }
 
   const userProfile = formatUserContext(userContext);
+  const substitutionGuide = formatSubstitutionPlanForPrompt(substitutionPlan);
 
   return `You are a nutrition optimization expert. Your job is to modify recipes to hit specific macro targets.
 
@@ -77,6 +83,9 @@ ${recipe.steps.map((step, i) => `${i + 1}. ${step}`).join('\n')}
 
 ## USER PROFILE & CONSTRAINTS (from quiz)
 ${userProfile}
+
+## USDA-GUIDED SUBSTITUTION CANDIDATES (precomputed; DO NOT invent outside these)
+${substitutionGuide}
 
 ---
 
@@ -132,6 +141,8 @@ You MUST modify ingredients to reach your Phase 1 targets. The final recipe macr
 4. The sum of original macros + all macroDelta values MUST equal the new macros
 5. Update cooking steps if your substitutions require different preparation
 6. NEVER include ingredients that conflict with allergens, diet style, or avoid-list above
+7. Use ONLY the USDA candidate options above; if none are available for an ingredient, prefer portion adjustments or adds from the provided playbook rather than inventing new ingredients
+8. Prioritize candidates with tasteScore/textureScore >= 4 and commonness >= 4 to preserve flavor and function; avoid uncommon or high-risk swaps
 
 ---
 
@@ -217,4 +228,24 @@ function formatUserContext(ctx) {
     return '- No additional user constraints provided';
   }
   return lines.join('\n');
+}
+
+function formatSubstitutionPlanForPrompt(plan) {
+  if (!plan || !plan.ingredients || !plan.ingredients.length) {
+    return '- No USDA-backed candidate table (fallback to portion tweaks and minor adds).';
+  }
+
+  return plan.ingredients.slice(0, 12).map((ing) => {
+    const base = ing.baseMacros
+      ? `Base: ${ing.baseMacros.calories} kcal, P ${ing.baseMacros.protein}g, C ${ing.baseMacros.carbs}g, F ${ing.baseMacros.fat}g (${ing.baseGrams || '?'}g)`
+      : 'Base macros: unknown';
+
+    const candidates = (ing.candidates || []).slice(0, 3).map((cand) => {
+      return `- ${cand.name}: swap ${cand.swapGrams}g, Δkcal ${cand.macroDelta.calories}, ΔP ${cand.macroDelta.protein}g, ΔC ${cand.macroDelta.carbs}g, ΔF ${cand.macroDelta.fat}g; taste ${cand.tasteScore}/5, texture ${cand.textureScore}/5, score ${cand.score}`;
+    }).join('\n');
+
+    const fallback = candidates || '- No safe swaps; only adjust portion or add lean/low-fat options.';
+
+    return `Ingredient: ${ing.name || ing.original} (${(ing.roles || []).join(', ') || 'uncategorized'})\n${base}\n${fallback}`;
+  }).join('\n\n');
 }

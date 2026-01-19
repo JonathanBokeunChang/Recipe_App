@@ -133,6 +133,7 @@ app.post('/api/recipes/modify', async (req, res) => {
       stepUpdates: modification.stepUpdates || [],
       summary: modification.summary,
       warnings: modification.warnings || [],
+      substitutionPlan: modification.substitutionPlan || null,
       goalType,
     });
   } catch (err) {
