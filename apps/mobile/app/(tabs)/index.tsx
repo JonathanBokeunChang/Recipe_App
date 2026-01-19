@@ -1,4 +1,4 @@
-import { Alert, Pressable, StyleSheet } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { Text, View } from '@/components/Themed';
@@ -75,16 +75,16 @@ export default function TabOneScreen() {
       </View>
 
       <View style={styles.actions}>
-        <Pressable style={styles.primaryButton} onPress={() => router.push('/paste-link')}>
-          <Text style={styles.primaryButtonText}>Paste Video Link</Text>
+        <Pressable style={styles.primaryButton} onPress={() => router.push('/upload-video' as any)}>
+          <Text style={styles.primaryButtonText}>Upload Video</Text>
+          <Text style={styles.buttonSubtext}>Best quality</Text>
         </Pressable>
         <Pressable
           style={styles.secondaryButton}
-          onPress={() =>
-            Alert.alert('Upload coming soon', 'We will add video uploads next.')
-          }
+          onPress={() => router.push('/paste-link')}
         >
-          <Text style={styles.secondaryButtonText}>Upload Video</Text>
+          <Text style={styles.secondaryButtonText}>Paste Link</Text>
+          <Text style={styles.buttonSubtext}>Quick & easy</Text>
         </Pressable>
         <Pressable style={styles.linkButton} onPress={signOut}>
           <Text style={styles.linkButtonText}>Sign out</Text>
@@ -218,5 +218,10 @@ const styles = StyleSheet.create({
   linkButtonText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  buttonSubtext: {
+    fontSize: 12,
+    opacity: 0.7,
+    marginTop: 2,
   },
 });

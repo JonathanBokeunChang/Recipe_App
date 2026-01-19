@@ -97,8 +97,8 @@ export default function QuizScreen() {
       quizState: quiz,
     });
 
-    if (saving) {
-      console.log('[quiz-screen] Blocked - saving in progress');
+    if (saving || submitting) {
+      console.log('[quiz-screen] Blocked - saving/submitting in progress');
       return;
     }
 
@@ -114,7 +114,26 @@ export default function QuizScreen() {
         console.log('[quiz-screen] Navigation called');
       } catch (err: any) {
         console.log('[quiz-screen] completeQuiz error:', err);
-        Alert.alert('Could not save quiz', err?.message ?? 'Please try again.');
+        // Provide more helpful error messages based on error type
+        let title = 'Could not save quiz';
+        let message = 'Please try again.';
+
+        if (err?.message?.includes('timed out') || err?.message?.includes('timeout')) {
+          title = 'Connection slow';
+          message = 'The save is taking longer than expected. Please check your internet connection and try again.';
+        } else if (err?.message?.includes('not authenticated')) {
+          title = 'Session expired';
+          message = 'Please sign in again to continue.';
+        } else if (err?.message?.includes('RLS policy')) {
+          title = 'Permission denied';
+          message = 'Unable to save your profile. Please try signing out and back in.';
+        } else if (err?.message) {
+          message = err.message;
+        }
+
+        Alert.alert(title, message, [
+          { text: 'OK', style: 'default' }
+        ]);
       } finally {
         setSubmitting(false);
       }
@@ -126,7 +145,7 @@ export default function QuizScreen() {
   const goBack = () => setStepIndex((idx) => Math.max(idx - 1, 0));
 
   const handleSkip = async () => {
-    if (saving) return; // Prevent double-submit
+    if (saving || submitting) return; // Prevent double-submit
 
     try {
       setSubmitting(true);
@@ -135,7 +154,23 @@ export default function QuizScreen() {
       await new Promise(resolve => setTimeout(resolve, 100));
       router.replace('/(tabs)');
     } catch (err: any) {
-      Alert.alert('Could not save quiz', err?.message ?? 'Please try again.');
+      console.log('[quiz-screen] skipQuiz error:', err);
+      let title = 'Could not skip quiz';
+      let message = 'Please try again.';
+
+      if (err?.message?.includes('timed out') || err?.message?.includes('timeout')) {
+        title = 'Connection slow';
+        message = 'Please check your internet connection and try again.';
+      } else if (err?.message?.includes('not authenticated')) {
+        title = 'Session expired';
+        message = 'Please sign in again to continue.';
+      } else if (err?.message) {
+        message = err.message;
+      }
+
+      Alert.alert(title, message, [
+        { text: 'OK', style: 'default' }
+      ]);
     } finally {
       setSubmitting(false);
     }

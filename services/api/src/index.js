@@ -1,8 +1,11 @@
 import cors from 'cors';
 import express from 'express';
+import multer from 'multer';
+import os from 'node:os';
+import fs from 'node:fs';
 import { nanoid } from 'nanoid';
 import { logEnvStatus } from './env.js';
-import { runTikTokPipeline } from './pipeline.js';
+import { runTikTokPipeline, runTikTokPipelineCompliant, runLocalVideoPipeline } from './pipeline.js';
 import { normalizeTikTokUrl } from './tiktok.js';
 import { JobStore } from './store.js';
 import { modifyRecipeForGoal } from './llm.js';
@@ -16,6 +19,20 @@ logEnvStatus();
 
 app.use(cors());
 app.use(express.json());
+
+// Configure multer for video uploads
+const upload = multer({
+  dest: os.tmpdir(),
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limit
+  fileFilter: (req, file, cb) => {
+    const allowedMimes = ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/mpeg'];
+    if (allowedMimes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only MP4, MOV, AVI, MPEG allowed.'));
+    }
+  }
+});
 
 async function createJob({ sourceUrl, provider }) {
   const id = nanoid();
@@ -46,14 +63,29 @@ async function processJob(id) {
   await store.update(id, { status: 'processing' });
 
   try {
-    const { recipe, steps, durationMs } = await runTikTokPipeline({
-      sourceUrl: current.sourceUrl,
-    });
+    // Use compliant pipeline by default (can be controlled with feature flag)
+    const useCompliant = process.env.USE_COMPLIANT_PIPELINE !== 'false'; // Default to true
+
+    let result;
+    if (useCompliant) {
+      console.log('[processJob] Using ToS-compliant pipeline (transcript-based)');
+      result = await runTikTokPipelineCompliant({
+        sourceUrl: current.sourceUrl,
+      });
+    } else {
+      console.log('[processJob] Using legacy pipeline (yt-dlp) - DEPRECATED');
+      result = await runTikTokPipeline({
+        sourceUrl: current.sourceUrl,
+      });
+    }
+
+    const { recipe, steps, metadata, durationMs } = result;
 
     await store.update(id, {
       status: 'completed',
       result: recipe,
       steps,
+      metadata,
       durationMs,
     });
   } catch (err) {
@@ -66,6 +98,131 @@ async function processJob(id) {
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true });
+});
+
+/**
+ * NEW: Video upload endpoint
+ * POST /api/upload-video
+ * Body: multipart/form-data with 'video' field
+ * Used when user uploads video from their device (ToS-compliant)
+ */
+app.post('/api/upload-video', (req, res, next) => {
+  const contentType = req.get('content-type') || '';
+  console.log('[upload-video] Request received:', {
+    contentType,
+    contentLength: req.get('content-length'),
+    method: req.method,
+    hasBoundary: contentType.includes('boundary='),
+  });
+
+  // Check if content-type is correct for multipart
+  if (!contentType.includes('multipart/form-data')) {
+    console.error('[upload-video] Invalid content-type:', contentType);
+    return res.status(400).json({
+      error: 'Content-Type must be multipart/form-data',
+      received: contentType || '(none)',
+    });
+  }
+
+  if (!contentType.includes('boundary=')) {
+    console.error('[upload-video] Missing boundary in content-type:', contentType);
+    return res.status(400).json({
+      error: 'Missing boundary in Content-Type header',
+      hint: 'multipart/form-data requests require a boundary parameter',
+      received: contentType,
+    });
+  }
+
+  next();
+}, (req, res, next) => {
+  // Wrap multer to catch errors gracefully
+  upload.single('video')(req, res, (err) => {
+    if (err) {
+      console.error('[upload-video] Multer error:', {
+        name: err.name,
+        message: err.message,
+        code: err.code,
+      });
+      return next(err);
+    }
+    next();
+  });
+}, async (req, res) => {
+  try {
+    console.log('[upload-video] After multer middleware:', {
+      hasFile: !!req.file,
+      hasBody: !!req.body,
+      bodyKeys: Object.keys(req.body || {}),
+    });
+
+    if (!req.file) {
+      console.error('[upload-video] No file received');
+      return res.status(400).json({ error: 'No video file provided' });
+    }
+
+    console.log('[upload-video] Received video upload:', {
+      filename: req.file.originalname,
+      size: req.file.size,
+      mimetype: req.file.mimetype
+    });
+
+    const jobId = nanoid();
+    const videoPath = req.file.path;
+
+    // Create job
+    const job = {
+      id: jobId,
+      status: 'queued',
+      provider: 'video_upload',
+      sourceUrl: null,
+      videoPath,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    await store.create(job);
+
+    // Process async
+    (async () => {
+      try {
+        await store.update(jobId, { status: 'processing' });
+
+        const result = await runLocalVideoPipeline({ videoPath });
+        const { recipe, steps, metadata, durationMs } = result;
+
+        await store.update(jobId, {
+          status: 'completed',
+          result: recipe,
+          steps,
+          metadata,
+          durationMs,
+        });
+      } catch (err) {
+        console.error('[upload-video] Processing failed:', err);
+        await store.update(jobId, {
+          status: 'failed',
+          error: err?.message ?? 'Video processing failed',
+        });
+      } finally {
+        // Clean up uploaded file
+        fs.unlink(videoPath, (err) => {
+          if (err) console.warn('[upload-video] failed to delete uploaded video:', err);
+          else console.log('[upload-video] cleaned up video file:', videoPath);
+        });
+      }
+    })();
+
+    res.status(202).json({ jobId, status: 'queued' });
+
+  } catch (err) {
+    console.error('[upload-video] video upload failed:', err);
+
+    // Clean up file if it was uploaded
+    if (req.file?.path) {
+      fs.unlink(req.file.path, () => {});
+    }
+
+    res.status(500).json({ error: err?.message ?? 'Video upload failed' });
+  }
 });
 
 app.post('/api/ingest', (req, res) => {
@@ -154,6 +311,41 @@ app.post('/api/macros/estimate', async (req, res) => {
     console.error('[macros] Error:', err);
     res.status(500).json({ error: err?.message ?? 'Failed to estimate macros' });
   }
+});
+
+// Global error handler - MUST be after all routes
+app.use((err, req, res, next) => {
+  console.error('[express] Error middleware caught:', {
+    name: err.name,
+    message: err.message,
+    code: err.code,
+    contentType: req.get('content-type'),
+    stack: err.stack?.split('\n').slice(0, 5).join('\n'),
+  });
+
+  if (err.message && err.message.includes('Boundary not found')) {
+    return res.status(400).json({
+      error: 'Invalid multipart/form-data request. Missing boundary in Content-Type header.',
+      hint: 'Ensure Content-Type is multipart/form-data with a boundary parameter.',
+      details: err.message
+    });
+  }
+
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({
+      error: 'File too large. Maximum size is 100MB.'
+    });
+  }
+
+  if (err.message && err.message.includes('Invalid file type')) {
+    return res.status(400).json({
+      error: err.message
+    });
+  }
+
+  return res.status(500).json({
+    error: err.message || 'Internal server error'
+  });
 });
 
 app.listen(port, () => {

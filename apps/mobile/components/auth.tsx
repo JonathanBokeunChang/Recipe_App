@@ -74,11 +74,19 @@ function extractGoal(profile?: Profile | null): GoalType | undefined {
 async function fetchProfile(userId: string): Promise<Profile | null> {
   log('fetchProfile called for:', userId);
   try {
-    const { data, error } = await supabase
+    // Add timeout to prevent hanging on slow networks
+    const timeoutMs = 15000;
+    const fetchPromise = supabase
       .from('profiles')
       .select('*')
       .eq('id', userId)
       .maybeSingle();
+
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Profile fetch timed out')), timeoutMs)
+    );
+
+    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
     if (error) {
       log('fetchProfile error:', error.message);
@@ -90,8 +98,8 @@ async function fetchProfile(userId: string): Promise<Profile | null> {
       quizStatus: data?.quiz?.status,
     });
     return data ?? null;
-  } catch (err) {
-    log('fetchProfile exception:', err);
+  } catch (err: any) {
+    log('fetchProfile exception:', err?.message ?? err);
     return null;
   }
 }

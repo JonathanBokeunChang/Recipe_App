@@ -124,36 +124,99 @@ export function QuizProvider({ children }: { children: React.ReactNode }) {
       throw new Error('Cannot save quiz: user not authenticated');
     }
     setSaving(true);
-    try {
-      const payload = {
-        state: nextQuiz ?? quiz,
-        status: nextStatus,
-        updatedAt: new Date().toISOString(),
-      };
-      console.log('[quiz] Upserting to Supabase...');
-      // Add timeout to prevent hanging
-      const upsertPromise = supabase.from('profiles').upsert({
-        id: user.id,
-        quiz: payload,
-      });
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Supabase upsert timed out after 10s')), 10000)
-      );
-      const { error } = await Promise.race([upsertPromise, timeoutPromise]) as any;
-      console.log('[quiz] Supabase upsert complete', { error: error?.message });
-      if (error) {
-        throw error;
+
+    const payload = {
+      state: nextQuiz ?? quiz,
+      status: nextStatus,
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Retry logic with exponential backoff
+    const maxRetries = 3;
+    const baseDelay = 500;
+    let lastError: Error | null = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`[quiz] Upserting to Supabase (attempt ${attempt}/${maxRetries})...`);
+
+        // Use a longer timeout (30s) for mobile networks
+        const timeoutMs = 30000;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+        const { data, error } = await supabase.from('profiles').upsert({
+          id: user.id,
+          quiz: payload,
+        }).select('id');
+
+        clearTimeout(timeoutId);
+
+        console.log('[quiz] Supabase upsert response', {
+          error: error?.message,
+          hasData: !!data,
+          dataLength: data?.length
+        });
+
+        if (error) {
+          throw new Error(`Supabase error: ${error.message}`);
+        }
+
+        // Detect silent RLS failure: upsert returns no error but also no data
+        // When RLS blocks an insert/update, Supabase returns { data: [], error: null }
+        if (!data || data.length === 0) {
+          console.warn('[quiz] Possible RLS silent failure - no data returned');
+          // Verify by reading back the profile
+          const { data: verifyData, error: verifyError } = await supabase
+            .from('profiles')
+            .select('quiz')
+            .eq('id', user.id)
+            .single();
+
+          if (verifyError) {
+            throw new Error(`Verification failed: ${verifyError.message}`);
+          }
+
+          // Check if the quiz was actually saved
+          const savedStatus = verifyData?.quiz?.status;
+          if (savedStatus !== nextStatus) {
+            throw new Error('Quiz save verification failed - data may not have been persisted due to RLS policy');
+          }
+          console.log('[quiz] Verification successful - quiz was saved despite empty upsert response');
+        }
+
+        // Success - reset local changes flag and refresh
+        hasLocalChanges.current = false;
+        console.log('[quiz] Calling refreshProfile...');
+        await refreshProfile();
+        console.log('[quiz] refreshProfile complete');
+        setSaving(false);
+        return; // Success - exit the retry loop
+
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`[quiz] Attempt ${attempt} failed:`, err?.message);
+
+        // Don't retry on certain errors
+        if (err?.message?.includes('user not authenticated') ||
+            err?.message?.includes('RLS policy')) {
+          break;
+        }
+
+        // Wait before retrying (exponential backoff)
+        if (attempt < maxRetries) {
+          const delay = baseDelay * Math.pow(2, attempt - 1);
+          console.log(`[quiz] Retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
       }
-      hasLocalChanges.current = false;
-      console.log('[quiz] Calling refreshProfile...');
-      await refreshProfile();
-      console.log('[quiz] refreshProfile complete');
-    } catch (err) {
-      console.warn('[quiz] Failed to persist quiz to profile', err);
-      throw err;
-    } finally {
-      setSaving(false);
     }
+
+    // All retries failed
+    hasLocalChanges.current = true; // Keep flag set so we know there are unsaved changes
+    setSaving(false);
+    console.error('[quiz] All retry attempts failed', lastError);
+    throw lastError ?? new Error('Failed to save quiz after multiple attempts');
   };
 
   const completeQuiz = async () => {

@@ -79,6 +79,73 @@ export async function generateRecipeFromVideo({ videoPath, url }) {
   }
 }
 
+/**
+ * Generate recipe from video transcript (text-based extraction)
+ * Complements existing generateRecipeFromVideo() for user uploads
+ * This is ToS-compliant as it doesn't download TikTok videos
+ * @param {Object} params - Parameters object
+ * @param {Object} params.transcript - Transcript object with text, segments, language, confidence
+ * @param {Object} params.metadata - Video metadata from oEmbed API
+ * @param {string} params.url - Source video URL
+ * @returns {Promise<Object>} Normalized recipe object
+ */
+export async function generateRecipeFromTranscript({ transcript, metadata, url }) {
+  const config = getLlmConfig();
+
+  try {
+    console.info('[llm] generating recipe from transcript');
+    console.info('[llm] transcript length:', transcript.text?.length || 0, 'characters');
+    console.info('[llm] transcript confidence:', transcript.confidence);
+
+    const genAI = createClient();
+    const model = genAI.getGenerativeModel({
+      model: config.model, // 'gemini-1.5-flash'
+      generationConfig: {
+        temperature: 0.35,
+        responseMimeType: 'application/json'
+      }
+    });
+
+    const prompt = `${SYSTEM_PROMPT}
+
+Video Metadata:
+- Title: ${metadata.title || 'Unknown'}
+- Author: ${metadata.authorName || 'Unknown'}
+- Source: TikTok cooking video
+
+Video Transcript:
+${transcript.text}
+
+Extract the recipe from this cooking video transcript. Include all ingredients with quantities, numbered steps in order, estimated times, and macros. Mark any inferred data in assumptions.
+
+Important: Since this is extracted from a transcript (not full video analysis), you may need to infer some details:
+- Visual-only ingredients may be missing; note these as assumptions
+- Quantities might be approximate if not clearly stated
+- Cooking techniques may need to be inferred from audio descriptions
+- Be conservative with macro estimates and clearly state assumptions`;
+
+    const result = await model.generateContent([{ text: prompt }]);
+    const response = result.response;
+    const message = response.text();
+
+    if (!message) {
+      throw new Error('Recipe model returned no content.');
+    }
+
+    const parsed = JSON.parse(message);
+    return normalizeRecipe(parsed, {
+      url,
+      videoAnalysis: false,
+      transcriptBased: true,
+      transcriptConfidence: transcript.confidence
+    });
+
+  } catch (err) {
+    console.warn('[llm] transcript recipe extraction failed:', err?.message ?? err);
+    return buildFallbackRecipe({ url, reason: 'transcript_processing_failed' });
+  }
+}
+
 function createClient() {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -87,7 +154,7 @@ function createClient() {
   return new GoogleGenerativeAI(apiKey);
 }
 
-function normalizeRecipe(recipe, { url, videoAnalysis }) {
+function normalizeRecipe(recipe, { url, videoAnalysis, transcriptBased, transcriptConfidence }) {
   return {
     title: recipe.title || 'Generated Recipe',
     servings: recipe.servings || 2,
@@ -97,8 +164,10 @@ function normalizeRecipe(recipe, { url, videoAnalysis }) {
     macros: recipe.macros || {},
     assumptions: recipe.assumptions || [],
     confidence: {
-      source: 'gemini-video',
+      source: transcriptBased ? 'gemini-transcript' : 'gemini-video',
       videoAnalysis: videoAnalysis,
+      transcriptBased: transcriptBased || false,
+      transcriptConfidence: transcriptConfidence || undefined,
       ...(recipe.confidence || {})
     },
     sourceUrl: url

@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 
 import { Text, View } from '@/components/Themed';
 import { API_BASE_URL } from '@/constants/api';
@@ -61,6 +62,7 @@ function parseVideoLink(input: string): ParseResult {
 export default function PasteLinkScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
+  const router = useRouter();
   const { user } = useAuth();
   const { quiz } = useQuiz();
   const { triggerRefresh } = useRecipeLibrary();
@@ -74,6 +76,7 @@ export default function PasteLinkScreen() {
   const [provider, setProvider] = React.useState<VideoSource | null>(null);
   const [jobId, setJobId] = React.useState<string | null>(null);
   const [resultPreview, setResultPreview] = React.useState<any>(null);
+  const [extractionMetadata, setExtractionMetadata] = React.useState<any>(null);
   const [modifiedRecipe, setModifiedRecipe] = React.useState<any>(null);
   const [isModifying, setIsModifying] = React.useState(false);
   const [modifyError, setModifyError] = React.useState<string | null>(null);
@@ -319,6 +322,7 @@ export default function PasteLinkScreen() {
             setStatus('completed');
             setMessage('Recipe generated.');
             setResultPreview(job.result);
+            setExtractionMetadata(job.metadata || null);
             if (pollRef.current) clearInterval(pollRef.current);
           } else if (job.status === 'failed') {
             setStatus('error');
@@ -420,6 +424,24 @@ export default function PasteLinkScreen() {
 
         {status === 'completed' && resultPreview ? (
           <>
+            {/* Show confidence warning if transcript-based extraction has low confidence */}
+            {extractionMetadata?.transcriptBased &&
+             extractionMetadata?.transcriptConfidence < 0.7 && (
+              <View style={styles.confidenceWarning} lightColor="#FEF3C7" darkColor="#78350F">
+                <Text style={styles.confidenceWarningTitle}>Low Confidence Extraction</Text>
+                <Text style={styles.confidenceWarningText}>
+                  This recipe was extracted from video captions (confidence: {Math.round(extractionMetadata.transcriptConfidence * 100)}%).
+                  For better accuracy, download the video and upload it directly.
+                </Text>
+                <Pressable
+                  style={styles.uploadSuggestionButton}
+                  onPress={() => router.push('/upload-video' as any)}
+                >
+                  <Text style={styles.uploadSuggestionButtonText}>Upload Video Instead</Text>
+                </Pressable>
+              </View>
+            )}
+
             <View style={styles.resultCard} lightColor="#F9FAFB" darkColor="#0B1224">
               <Text style={styles.resultTitle}>Original Recipe</Text>
               <Text style={styles.resultSubtitle}>{resultPreview.title}</Text>
@@ -977,5 +999,35 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
     opacity: 0.95,
+  },
+  confidenceWarning: {
+    marginTop: 16,
+    borderRadius: 12,
+    padding: 16,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+  },
+  confidenceWarningTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#92400E',
+  },
+  confidenceWarningText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#78350F',
+  },
+  uploadSuggestionButton: {
+    backgroundColor: '#F59E0B',
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  uploadSuggestionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
