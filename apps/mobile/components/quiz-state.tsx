@@ -131,6 +131,10 @@ export function QuizProvider({ children }: { children: React.ReactNode }) {
       updatedAt: new Date().toISOString(),
     };
 
+    console.log('=== SUPABASE PAYLOAD ===');
+    console.log('Payload being sent to Supabase:', JSON.stringify(quizPayload, null, 2));
+    console.log('=== END PAYLOAD ===');
+
     // Retry logic with exponential backoff
     const maxRetries = 3;
     const baseDelay = 500;
@@ -249,8 +253,22 @@ export function QuizProvider({ children }: { children: React.ReactNode }) {
     }
 
     const quizSnapshot = { ...quiz };
+    console.log('=== QUIZ SAVE DEBUG ===');
+    console.log('Quiz snapshot to save:', JSON.stringify(quizSnapshot, null, 2));
+    console.log('Key fields check:', {
+      biologicalSex: quizSnapshot.biologicalSex,
+      age: quizSnapshot.age,
+      heightCm: quizSnapshot.heightCm,
+      weightKg: quizSnapshot.weightKg,
+      goal: quizSnapshot.goal,
+      activityLevel: quizSnapshot.activityLevel,
+    });
+    console.log('=== END DEBUG ===');
+    console.log('[quiz-state] completeQuiz: calling persistQuiz with status=completed');
     await persistQuiz('completed', quizSnapshot);
+    console.log('[quiz-state] completeQuiz: persistQuiz finished, about to setStatus');
     setStatus('completed');
+    console.log('[quiz-state] completeQuiz: setStatus(completed) called');
   };
   const skipQuiz = async () => {
     await persistQuiz('skipped');
@@ -284,8 +302,11 @@ export function QuizProvider({ children }: { children: React.ReactNode }) {
       console.log('[quiz] Hydrating from profile', {
         status: user.profile.quiz.status,
         goal: user.profile.quiz.state?.goal,
+        age: user.profile.quiz.state?.age,
+        weight: user.profile.quiz.state?.weightKg,
         updatedAt: user.profile.quiz.updatedAt,
       });
+      console.log('[quiz] FULL QUIZ DATA TO HYDRATE:', JSON.stringify(user.profile.quiz, null, 2));
       hydrateFromProfile(user.profile.quiz);
     } else if (!user?.id) {
       console.log('[quiz] No user - resetting quiz');

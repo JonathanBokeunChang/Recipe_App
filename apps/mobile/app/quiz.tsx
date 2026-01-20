@@ -75,6 +75,18 @@ export default function QuizScreen() {
     return paceOptions.find((p) => p.value === quiz.pace)?.note ?? 'Balanced';
   }, [quiz.pace]);
 
+  // Debug logging for quiz flow
+  console.log('[quiz-screen] Render', {
+    currentStep,
+    stepIndex,
+    quizStatus: status,
+    isStepValid: Boolean(currentStep === 'profile' ? quiz.biologicalSex && quiz.age && quiz.age >= 13 :
+      currentStep === 'body' ? quiz.heightCm && quiz.weightKg :
+      currentStep === 'goal' ? quiz.goal && quiz.activityLevel : true),
+    saving,
+    submitting,
+  });
+
   const isStepValid = useMemo(() => {
     if (currentStep === 'profile') {
       return Boolean(quiz.biologicalSex && quiz.age && quiz.age >= 13);
@@ -107,11 +119,13 @@ export default function QuizScreen() {
         setSubmitting(true);
         console.log('[quiz-screen] Calling completeQuiz...');
         await completeQuiz();
-        console.log('[quiz-screen] completeQuiz finished, navigating...');
+        console.log('[quiz-screen] completeQuiz finished successfully');
+        console.log('[quiz-screen] Waiting 100ms for state propagation...');
         // Small delay to ensure state propagation before navigation
         await new Promise(resolve => setTimeout(resolve, 100));
+        console.log('[quiz-screen] About to call router.replace("/(tabs)")');
         router.replace('/(tabs)');
-        console.log('[quiz-screen] Navigation called');
+        console.log('[quiz-screen] router.replace("/(tabs)") called - navigation should happen now');
       } catch (err: any) {
         console.log('[quiz-screen] completeQuiz error:', err);
         // Provide more helpful error messages based on error type

@@ -96,7 +96,13 @@ async function fetchProfile(userId: string): Promise<Profile | null> {
       hasData: !!data,
       hasQuiz: !!data?.quiz,
       quizStatus: data?.quiz?.status,
+      quizGoal: data?.quiz?.state?.goal,
+      quizAge: data?.quiz?.state?.age,
+      quizWeight: data?.quiz?.state?.weightKg,
     });
+    if (data?.quiz) {
+      log('fetchProfile - FULL QUIZ DATA:', JSON.stringify(data.quiz, null, 2));
+    }
     return data ?? null;
   } catch (err: any) {
     log('fetchProfile exception:', err?.message ?? err);

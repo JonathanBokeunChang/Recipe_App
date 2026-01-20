@@ -95,18 +95,8 @@ function RootLayoutNav() {
       return null; // Already in auth, no navigation needed
     }
 
-    // Authenticated - check quiz status
-    const quizComplete = quizStatus === 'completed' || quizStatus === 'skipped';
-
-    if (!quizComplete) {
-      // Need to complete quiz
-      if (!inQuiz) {
-        return '/quiz';
-      }
-      return null; // Already in quiz
-    }
-
-    // Authenticated with complete quiz - go to main app
+    // Authenticated - go to main app (quiz is optional)
+    // Users can complete quiz later via Profile page
     if (inAuthGroup) {
       return '/(tabs)';
     }
@@ -117,7 +107,10 @@ function RootLayoutNav() {
   // Handle navigation based on auth state
   useEffect(() => {
     // Wait for navigation to be ready and auth to finish loading
-    if (!isNavigationReady || authLoading) return;
+    if (!isNavigationReady || authLoading) {
+      console.log('[routing] Navigation effect skipped - not ready', { isNavigationReady, authLoading });
+      return;
+    }
 
     // Detect user change (sign in/out)
     const currentUserId = user?.id ?? null;
@@ -129,10 +122,26 @@ function RootLayoutNav() {
       hasNavigatedRef.current = false;
     }
 
+    console.log('[routing] Navigation effect running', {
+      isNavigationReady,
+      authLoading,
+      userId: user?.id,
+      quizStatus,
+      currentSegment: segments[0],
+      hasNavigated: hasNavigatedRef.current,
+      userChanged,
+    });
+
     const targetRoute = getTargetRoute();
+
+    console.log('[routing] Decision', {
+      targetRoute,
+      willNavigate: !!targetRoute && !hasNavigatedRef.current,
+    });
 
     if (targetRoute && !hasNavigatedRef.current) {
       hasNavigatedRef.current = true;
+      console.log('[routing] Navigating to:', targetRoute);
       // Use setTimeout to ensure navigation happens after render
       setTimeout(() => {
         router.replace(targetRoute as any);
