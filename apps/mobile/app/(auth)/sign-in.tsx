@@ -16,7 +16,7 @@ import { useAuth } from '@/components/auth';
 type FormMode = 'signIn' | 'signUp';
 
 export default function SignInScreen() {
-  const { signInWithEmail, signUpWithEmail, loading } = useAuth();
+  const { signInWithEmail, signUpWithEmail, signInWithGoogle, loading } = useAuth();
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
 
@@ -26,6 +26,7 @@ export default function SignInScreen() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   // Validate form inputs
   const isValid = useMemo(() => {
@@ -123,6 +124,19 @@ export default function SignInScreen() {
     setError(null);
     setMessage(null);
   }, []);
+
+  const handleGoogleSignIn = useCallback(async () => {
+    setGoogleLoading(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await signInWithGoogle();
+    } catch (err: any) {
+      setError(err?.message || 'Google sign-in failed. Please try again.');
+    } finally {
+      setGoogleLoading(false);
+    }
+  }, [signInWithGoogle]);
 
   // Determine if button should be disabled
   const isButtonDisabled = !isValid || isSubmitting || loading;
@@ -246,6 +260,34 @@ export default function SignInScreen() {
                 </Text>
               </Pressable>
 
+              <View style={styles.divider}>
+                <View style={[styles.dividerLine, { backgroundColor: isDark ? '#374151' : '#E5E7EB' }]} />
+                <Text style={[styles.dividerText, { color: isDark ? '#9CA3AF' : '#6B7280' }]}>or</Text>
+                <View style={[styles.dividerLine, { backgroundColor: isDark ? '#374151' : '#E5E7EB' }]} />
+              </View>
+
+              <Pressable
+                style={[
+                  styles.googleButton,
+                  {
+                    backgroundColor: isDark ? '#1F2937' : '#FFFFFF',
+                    borderColor: isDark ? '#374151' : '#E5E7EB',
+                  },
+                  (googleLoading || loading) && styles.buttonDisabled,
+                ]}
+                onPress={handleGoogleSignIn}
+                disabled={googleLoading || loading || isSubmitting}
+              >
+                <Text
+                  style={[
+                    styles.googleButtonText,
+                    { color: isDark ? '#F9FAFB' : '#111827' },
+                  ]}
+                >
+                  {googleLoading ? 'Signing in...' : 'Continue with Google'}
+                </Text>
+              </Pressable>
+
               <Text style={styles.helperText}>
                 We use Supabase auth. Email confirmation may be required.
               </Text>
@@ -359,5 +401,31 @@ const styles = StyleSheet.create({
     fontSize: 12,
     opacity: 0.7,
     textAlign: 'center',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 16,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    fontSize: 14,
+  },
+  googleButton: {
+    borderWidth: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  googleButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
 });

@@ -7,9 +7,14 @@ import React, {
   useCallback,
   useRef,
 } from 'react';
+import * as WebBrowser from 'expo-web-browser';
+import { makeRedirectUri } from 'expo-auth-session';
 
 import type { QuizState } from './quiz-state';
 import { supabase, logAuthState, restoreSession } from '@/supabaseClient';
+
+// Ensure browser auth sessions are cleaned up
+WebBrowser.maybeCompleteAuthSession();
 
 const log = (...args: any[]) => console.log('[auth]', ...args);
 
@@ -49,6 +54,7 @@ type AuthContextValue = {
   loading: boolean;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (email: string, password: string) => Promise<SignUpResult>;
+  signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   setGoal: (goal: GoalType) => Promise<void>;
@@ -377,6 +383,86 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  // Sign in with Google OAuth
+  const signInWithGoogle = useCallback(async (): Promise<void> => {
+    log('signInWithGoogle: starting');
+    setLoading(true);
+
+    try {
+      const redirectUrl = makeRedirectUri({
+        scheme: 'mobile',
+        path: 'callback',
+      });
+
+      log('signInWithGoogle: redirectUrl =', redirectUrl);
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl,
+          skipBrowserRedirect: true,
+        },
+      });
+
+      if (error) {
+        log('signInWithGoogle: OAuth error', error.message);
+        setLoading(false);
+        throw error;
+      }
+
+      if (data?.url) {
+        log('signInWithGoogle: opening browser with URL');
+        const result = await WebBrowser.openAuthSessionAsync(
+          data.url,
+          redirectUrl
+        );
+
+        log('signInWithGoogle: browser result', result.type);
+
+        if (result.type === 'success' && result.url) {
+          // Extract tokens from URL fragment (hash) or query params
+          const url = new URL(result.url);
+
+          // Supabase typically returns tokens in the hash fragment
+          const hashParams = new URLSearchParams(url.hash.substring(1));
+          const queryParams = url.searchParams;
+
+          const accessToken = hashParams.get('access_token') || queryParams.get('access_token');
+          const refreshToken = hashParams.get('refresh_token') || queryParams.get('refresh_token');
+
+          log('signInWithGoogle: tokens found', {
+            hasAccessToken: !!accessToken,
+            hasRefreshToken: !!refreshToken
+          });
+
+          if (accessToken) {
+            const { error: sessionError } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken ?? '',
+            });
+
+            if (sessionError) {
+              log('signInWithGoogle: session error', sessionError.message);
+              throw sessionError;
+            }
+
+            log('signInWithGoogle: session set successfully');
+          } else {
+            log('signInWithGoogle: no access token in callback URL');
+          }
+        } else if (result.type === 'cancel' || result.type === 'dismiss') {
+          log('signInWithGoogle: user cancelled');
+        }
+      }
+
+      setLoading(false);
+    } catch (err) {
+      log('signInWithGoogle: error', err);
+      setLoading(false);
+      throw err;
+    }
+  }, []);
+
   // Sign out
   const signOut = useCallback(async (): Promise<void> => {
     log('signOut: starting');
@@ -502,11 +588,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loading,
       signInWithEmail,
       signUpWithEmail,
+      signInWithGoogle,
       signOut,
       refreshProfile,
       setGoal,
     }),
-    [user, loading, signInWithEmail, signUpWithEmail, signOut, refreshProfile, setGoal]
+    [user, loading, signInWithEmail, signUpWithEmail, signInWithGoogle, signOut, refreshProfile, setGoal]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
