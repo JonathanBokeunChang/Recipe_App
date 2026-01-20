@@ -106,10 +106,13 @@ export async function generateRecipeFromTranscript({ transcript, metadata, url }
       }
     });
 
+    // Extract a short title from the potentially long TikTok caption
+    const tiktokCaption = metadata.title || 'Unknown';
+
     const prompt = `${SYSTEM_PROMPT}
 
 Video Metadata:
-- Title: ${metadata.title || 'Unknown'}
+- TikTok Caption (may be long - extract recipe name from this): ${tiktokCaption}
 - Author: ${metadata.authorName || 'Unknown'}
 - Source: TikTok cooking video
 
@@ -117,6 +120,12 @@ Video Transcript:
 ${transcript.text}
 
 Extract the recipe from this cooking video transcript. Include all ingredients with quantities, numbered steps in order, estimated times, and macros. Mark any inferred data in assumptions.
+
+IMPORTANT - Title extraction rules:
+- The TikTok caption above may contain the ENTIRE recipe in text form - do NOT use this as the title
+- Generate a SHORT, DESCRIPTIVE recipe title (3-8 words max) that describes the dish
+- Examples of good titles: "Garlic Butter Chicken", "One-Pan Pasta Primavera", "Easy Beef Tacos"
+- Do NOT include hashtags, emojis, or promotional text in the title
 
 Important: Since this is extracted from a transcript (not full video analysis), you may need to infer some details:
 - Visual-only ingredients may be missing; note these as assumptions
@@ -154,7 +163,11 @@ function createClient() {
   return new GoogleGenerativeAI(apiKey);
 }
 
-function normalizeRecipe(recipe, { url, videoAnalysis, transcriptBased, transcriptConfidence }) {
+function normalizeRecipe(recipe, { url, videoAnalysis, transcriptBased, transcriptConfidence, captionBased }) {
+  let source = 'gemini-video';
+  if (transcriptBased) source = 'gemini-transcript';
+  if (captionBased) source = 'gemini-caption';
+
   return {
     title: recipe.title || 'Generated Recipe',
     servings: recipe.servings || 2,
@@ -164,9 +177,10 @@ function normalizeRecipe(recipe, { url, videoAnalysis, transcriptBased, transcri
     macros: recipe.macros || {},
     assumptions: recipe.assumptions || [],
     confidence: {
-      source: transcriptBased ? 'gemini-transcript' : 'gemini-video',
+      source,
       videoAnalysis: videoAnalysis,
       transcriptBased: transcriptBased || false,
+      captionBased: captionBased || false,
       transcriptConfidence: transcriptConfidence || undefined,
       ...(recipe.confidence || {})
     },
@@ -174,7 +188,88 @@ function normalizeRecipe(recipe, { url, videoAnalysis, transcriptBased, transcri
   };
 }
 
-function buildFallbackRecipe({ url }) {
+/**
+ * Generate recipe from TikTok caption/bio when transcript is unavailable
+ * Many TikTok cooking videos include the full recipe in their caption
+ * @param {Object} params - Parameters object
+ * @param {Object} params.metadata - Video metadata from oEmbed API (includes caption as title)
+ * @param {string} params.url - Source video URL
+ * @returns {Promise<Object>} Normalized recipe object
+ */
+export async function generateRecipeFromCaption({ metadata, url }) {
+  const config = getLlmConfig();
+  const caption = metadata.title || '';
+
+  // Check if caption looks like it contains recipe content
+  const hasRecipeContent = caption.length > 100 ||
+    /ingredient|step|cook|bake|mix|add|tbsp|tsp|cup|oz|gram|minute/i.test(caption);
+
+  if (!hasRecipeContent) {
+    console.info('[llm] caption too short or lacks recipe keywords, using fallback');
+    return buildFallbackRecipe({ url, reason: 'no_recipe_in_caption' });
+  }
+
+  try {
+    console.info('[llm] generating recipe from TikTok caption');
+    console.info('[llm] caption length:', caption.length, 'characters');
+
+    const genAI = createClient();
+    const model = genAI.getGenerativeModel({
+      model: config.model,
+      generationConfig: {
+        temperature: 0.35,
+        responseMimeType: 'application/json'
+      }
+    });
+
+    const prompt = `${SYSTEM_PROMPT}
+
+You are extracting a recipe from a TikTok video caption/bio. The creator has written out recipe details in their video description.
+
+Video Information:
+- Author: ${metadata.authorName || 'Unknown'}
+- Source: TikTok cooking video
+
+TikTok Caption/Bio (contains the recipe):
+${caption}
+
+Extract the recipe from this TikTok caption. The creator likely included ingredients and instructions in the text above.
+
+IMPORTANT - Title extraction rules:
+- Generate a SHORT, DESCRIPTIVE recipe title (3-8 words max) that describes the dish
+- Examples: "Honey BBQ Chicken Mac & Cheese", "Garlic Butter Shrimp Pasta"
+- Do NOT include hashtags, emojis, meal prep counts, or promotional text in the title
+
+IMPORTANT - Extraction rules:
+- Parse ingredient lists from the caption (look for quantities like "2 cups", "1 lb", "500g")
+- Convert informal measurements to standard ones when needed
+- Extract cooking steps in order (look for numbered lists or sequential instructions)
+- Estimate macros based on the ingredients
+- Note any assumptions you make in the assumptions array`;
+
+    const result = await model.generateContent([{ text: prompt }]);
+    const response = result.response;
+    const message = response.text();
+
+    if (!message) {
+      throw new Error('Recipe model returned no content.');
+    }
+
+    const parsed = JSON.parse(message);
+    return normalizeRecipe(parsed, {
+      url,
+      videoAnalysis: false,
+      transcriptBased: false,
+      captionBased: true
+    });
+
+  } catch (err) {
+    console.warn('[llm] caption recipe extraction failed:', err?.message ?? err);
+    return buildFallbackRecipe({ url, reason: 'caption_processing_failed' });
+  }
+}
+
+function buildFallbackRecipe({ url, reason }) {
   const baseMacros = { calories: 480, protein: 30, carbs: 40, fat: 18 };
   return {
     title: 'Recipe draft (offline fallback)',
@@ -193,12 +288,15 @@ function buildFallbackRecipe({ url }) {
     times: { prepMinutes: 10, cookMinutes: 15 },
     macros: baseMacros,
     assumptions: [
-      'Fallback recipe used because Gemini video analysis was unavailable (quota/network).',
-      'Please check the original video to adjust ingredients and steps.',
+      'Fallback recipe used because video analysis was unavailable.',
+      reason === 'no_recipe_in_caption'
+        ? 'Video caption did not contain recipe details.'
+        : 'Please check the original video to adjust ingredients and steps.',
     ],
     confidence: {
       source: 'fallback-heuristic',
-      videoAnalysis: false
+      videoAnalysis: false,
+      reason: reason || 'unknown'
     },
     sourceUrl: url
   };

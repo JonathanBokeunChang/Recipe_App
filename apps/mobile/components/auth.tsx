@@ -132,6 +132,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Track if component is mounted to prevent state updates after unmount
   const mountedRef = useRef(true);
+  // Track auth/profile requests to ignore stale responses (e.g., INITIAL_SESSION finishing after SIGNED_IN)
+  const authRequestIdRef = useRef(0);
+  const profileRequestIdRef = useRef(0);
 
   // Build user object from session user + profile
   const buildUser = useCallback(
@@ -172,19 +175,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       async (event, session) => {
         if (!mountedRef.current) return;
 
-        log('onAuthStateChange:', event, session?.user?.id ?? 'no user');
+        const requestId = ++authRequestIdRef.current;
+
+        log('onAuthStateChange:', event, session?.user?.id ?? 'no user', {
+          requestId,
+        });
 
         if (session?.user) {
           // User is signed in
           try {
             const userObj = await buildUser(session.user);
-            if (mountedRef.current) {
-              setUser(userObj);
-              log('User set:', userObj.id);
+            if (mountedRef.current && requestId === authRequestIdRef.current) {
+              setUser((prev) => {
+                const isSameUser = prev?.id === userObj.id;
+                return {
+                  ...userObj,
+                  // Preserve previous profile/goal if this auth event couldn't fetch them (e.g., timeout)
+                  profile: userObj.profile ?? (isSameUser ? prev?.profile ?? null : null),
+                  goal: userObj.goal ?? (isSameUser ? prev?.goal : undefined),
+                };
+              });
+              log('User set:', userObj.id, { requestId });
+            } else {
+              log('onAuthStateChange: stale auth update skipped', {
+                requestId,
+                latestRequestId: authRequestIdRef.current,
+              });
             }
           } catch (err) {
             log('Error building user:', err);
-            if (mountedRef.current) {
+            if (mountedRef.current && requestId === authRequestIdRef.current) {
               // Still set a basic user even if profile fetch fails
               setUser({
                 id: session.user.id,
@@ -203,7 +223,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         // Mark loading as complete after first auth state change
-        if (isInitialLoad && mountedRef.current) {
+        if (isInitialLoad && mountedRef.current && requestId === authRequestIdRef.current) {
           isInitialLoad = false;
           setLoading(false);
           log('Initial auth complete, loading=false');
@@ -360,6 +380,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await supabase.auth.signOut();
       // onAuthStateChange will handle clearing the user
       log('signOut: complete');
+      // Always set loading false after signOut completes
+      // onAuthStateChange only sets loading=false on initial load
+      setLoading(false);
     } catch (err) {
       log('signOut error:', err);
       // Force clear user state even if signOut fails
@@ -372,17 +395,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshProfile = useCallback(async (): Promise<void> => {
     if (!user?.id) return;
 
-    log('refreshProfile: starting', { userId: user.id });
-    const profile = await fetchProfile(user.id);
+    const requestId = ++profileRequestIdRef.current;
+    const currentUserId = user.id;
+
+    log('refreshProfile: starting', { userId: currentUserId, requestId });
+    const profile = await fetchProfile(currentUserId);
     const goal = extractGoal(profile);
 
+    if (requestId !== profileRequestIdRef.current) {
+      log('refreshProfile: stale response ignored', {
+        requestId,
+        latestRequestId: profileRequestIdRef.current,
+      });
+      return;
+    }
+
+    log('refreshProfile: extracted data', {
+      hasProfile: !!profile,
+      hasQuiz: !!profile?.quiz,
+      quizStatus: profile?.quiz?.status,
+      quizStateGoal: profile?.quiz?.state?.goal,
+      profileGoal: profile?.goal,
+      extractedGoal: goal,
+    });
+
     setUser((prev) => {
-      if (!prev) return prev;
-      return {
+      if (!prev || prev.id !== currentUserId) return prev;
+      const updatedUser = {
         ...prev,
-        profile,
+        profile: profile ?? prev.profile ?? null,
         goal: goal ?? prev.goal,
       };
+      log('refreshProfile: user state updated', {
+        prevGoal: prev.goal,
+        newGoal: updatedUser.goal
+      });
+      return updatedUser;
     });
     log('refreshProfile: complete');
   }, [user?.id]);
@@ -415,13 +463,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Persist to database
       try {
-        const { error } = await supabase.from('profiles').upsert({
+        const { data, error } = await supabase.from('profiles').upsert({
           id: user.id,
+          email: user.email,
           quiz: nextQuiz,
+          updated_at: new Date().toISOString(),
+        }).select('id, quiz');
+
+        log('setGoal: persist response', {
+          hasData: !!data,
+          dataLength: data?.length,
+          error: error?.message,
+          returnedGoal: data?.[0]?.quiz?.state?.goal,
         });
 
         if (error) {
-          log('setGoal: persist error', error.message);
+          log('setGoal: persist error', error.message, error.code);
         } else {
           await refreshProfile();
         }
@@ -429,7 +486,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         log('setGoal: exception', err);
       }
     },
-    [user?.id, user?.profile?.quiz, refreshProfile]
+    [user?.id, user?.email, user?.profile?.quiz, refreshProfile]
   );
 
   // Memoize context value

@@ -2,10 +2,65 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { runCommand } from './exec.js';
-import { generateRecipeFromVideo, generateRecipeFromTranscript } from './llm.js';
+import { generateRecipeFromVideo, generateRecipeFromTranscript, generateRecipeFromCaption } from './llm.js';
 import { normalizeTikTokUrl } from './tiktok.js';
 import { getTikTokOEmbed } from './tiktok-oembed.js';
 import { extractTikTokTranscript } from './transcript-api.js';
+
+/**
+ * Extract a short, descriptive title from a TikTok caption
+ * TikTok captions often contain the entire recipe in text form - we want just the dish name
+ * @param {string} caption - The full TikTok caption/title
+ * @param {string} authorName - The author's name (fallback)
+ * @returns {string} A short recipe title
+ */
+function extractShortTitle(caption, authorName) {
+  if (!caption || caption.trim() === '') {
+    return authorName ? `Recipe by ${authorName}` : 'Recipe from TikTok';
+  }
+
+  // Clean up the caption
+  let title = caption.trim();
+
+  // Remove common TikTok prefixes
+  title = title.replace(/^(recipe|how to make|easy|simple|quick|the best|my|homemade)\s+/i, '');
+
+  // Take just the first line if there are line breaks
+  const firstLine = title.split(/[\n\r]/)[0].trim();
+
+  // Remove hashtags and everything after them
+  const withoutHashtags = firstLine.split(/#/)[0].trim();
+
+  // Remove emojis (common in TikTok captions)
+  const withoutEmojis = withoutHashtags.replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]/gu, '').trim();
+
+  // If still too long, truncate intelligently
+  let result = withoutEmojis;
+  if (result.length > 60) {
+    // Try to find a natural break point (comma, dash, pipe)
+    const breakMatch = result.match(/^(.{20,50}?)[,\-|•]/);
+    if (breakMatch) {
+      result = breakMatch[1].trim();
+    } else {
+      // Just take first ~50 chars and find word boundary
+      result = result.substring(0, 50).replace(/\s+\S*$/, '').trim();
+      if (result.length < 10) {
+        // If too short after truncation, use more
+        result = withoutEmojis.substring(0, 50).trim() + '...';
+      }
+    }
+  }
+
+  // Final cleanup - remove trailing punctuation except for reasonable chars
+  result = result.replace(/[,\-|•:]+$/, '').trim();
+
+  // If we ended up with nothing useful, use fallback
+  if (!result || result.length < 3) {
+    return authorName ? `Recipe by ${authorName}` : 'Recipe from TikTok';
+  }
+
+  return result;
+}
 
 export async function runTikTokPipeline({ sourceUrl }) {
   const steps = [];
@@ -141,31 +196,30 @@ export async function runTikTokPipelineCompliant({ sourceUrl }) {
       }
     });
 
-    // Step 4: Generate recipe from transcript
+    // Step 4: Generate recipe from transcript OR caption
     const recipe = await runStep('generate_recipe', async () => {
       if (!transcript.text || transcript.confidence < 0.3) {
-        // Low confidence or no transcript - return fallback with suggestion
+        // Low confidence or no transcript - try to extract from caption instead
         console.warn('[pipeline] low transcript confidence or no transcript available');
-        return {
-          title: metadata.title || 'Recipe from TikTok',
-          servings: 2,
-          ingredients: [],
-          steps: ['Unable to extract recipe from video transcript. Please upload the video directly for better results.'],
-          times: {},
-          macros: {},
-          assumptions: [
-            'Transcript extraction failed or video has no captions.',
-            'For best results, download the video and upload it directly to the app.',
-          ],
-          confidence: {
-            source: 'fallback',
-            transcriptBased: true,
-            transcriptConfidence: transcript.confidence,
-            reason: 'no_transcript_available',
-            suggestion: 'upload_video_for_better_results'
-          },
-          sourceUrl: normalizedUrl
-        };
+        console.info('[pipeline] attempting to extract recipe from TikTok caption');
+
+        // Try to extract recipe from the TikTok caption/bio
+        // Many cooking videos include the full recipe in their description
+        const captionRecipe = await generateRecipeFromCaption({
+          metadata,
+          url: normalizedUrl
+        });
+
+        // Add a note about the extraction method
+        if (captionRecipe.confidence?.source === 'gemini-caption') {
+          captionRecipe.assumptions = captionRecipe.assumptions || [];
+          captionRecipe.assumptions.push(
+            'Recipe extracted from video caption/bio (no audio transcript available).',
+            'For more accurate extraction, upload the video directly.'
+          );
+        }
+
+        return captionRecipe;
       }
 
       return await generateRecipeFromTranscript({
@@ -175,13 +229,19 @@ export async function runTikTokPipelineCompliant({ sourceUrl }) {
       });
     });
 
+    // Determine the extraction method used
+    const extractionMethod = transcript.text && transcript.confidence >= 0.3
+      ? 'transcript'
+      : (recipe.confidence?.source === 'gemini-caption' ? 'caption' : 'fallback');
+
     return {
       recipe,
       steps,
       metadata: {
         transcriptAvailable: !!transcript.text,
         transcriptConfidence: transcript.confidence,
-        method: transcript.text ? 'transcript' : 'fallback',
+        method: extractionMethod,
+        captionBased: recipe.confidence?.captionBased || false,
         videoMetadata: metadata
       },
       durationMs: Date.now() - startedAt,

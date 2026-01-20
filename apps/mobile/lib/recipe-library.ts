@@ -312,3 +312,38 @@ export async function fetchRecipeDocument(
   log('========== FETCH RECIPE DOCUMENT COMPLETE ==========');
   return document;
 }
+
+export async function deleteRecipeFromLibrary(recipeId: string, userId: string): Promise<void> {
+  log('========== DELETE RECIPE START ==========');
+  log('deleteRecipeFromLibrary called with', { recipeId, userId });
+
+  if (!recipeId || !userId) {
+    throw new Error('Recipe ID and user ID are required to delete a recipe');
+  }
+
+  const { error } = await supabase
+    .from(TABLE_NAME)
+    .delete()
+    .eq('id', recipeId)
+    .eq('user_id', userId);
+
+  if (error) {
+    logError('Delete FAILED:', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
+
+    if (error.code === '42P01') {
+      throw new Error(`The ${TABLE_NAME} table does not exist. Please set up the database schema in Supabase.`);
+    }
+    if (error.code === '42501' || error.message.includes('row-level security')) {
+      throw new Error('Permission denied. Please check Row Level Security policies in Supabase.');
+    }
+    throw new Error(`Failed to delete recipe: ${error.message}`);
+  }
+
+  log('Delete SUCCESS for recipe', recipeId);
+  log('========== DELETE RECIPE COMPLETE ==========');
+}

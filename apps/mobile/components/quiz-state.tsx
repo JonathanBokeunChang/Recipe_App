@@ -118,14 +118,14 @@ export function QuizProvider({ children }: { children: React.ReactNode }) {
   };
 
   const persistQuiz = async (nextStatus: QuizStatus, nextQuiz?: QuizState) => {
-    console.log('[quiz] persistQuiz called', { nextStatus, userId: user?.id });
+    console.log('[quiz] persistQuiz called', { nextStatus, userId: user?.id, userEmail: user?.email });
     if (!user?.id) {
       console.warn('[quiz] persistQuiz called without user ID');
       throw new Error('Cannot save quiz: user not authenticated');
     }
     setSaving(true);
 
-    const payload = {
+    const quizPayload = {
       state: nextQuiz ?? quiz,
       status: nextStatus,
       updatedAt: new Date().toISOString(),
@@ -139,33 +139,33 @@ export function QuizProvider({ children }: { children: React.ReactNode }) {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         console.log(`[quiz] Upserting to Supabase (attempt ${attempt}/${maxRetries})...`);
+        console.log('[quiz] Quiz payload:', JSON.stringify(quizPayload, null, 2));
 
-        // Use a longer timeout (30s) for mobile networks
-        const timeoutMs = 30000;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
+        // Include email and updated_at in the upsert to ensure profile row exists
+        // and to comply with any RLS policies that might require these fields
         const { data, error } = await supabase.from('profiles').upsert({
           id: user.id,
-          quiz: payload,
-        }).select('id');
-
-        clearTimeout(timeoutId);
+          email: user.email,
+          quiz: quizPayload,
+          updated_at: new Date().toISOString(),
+        }).select('id, quiz');
 
         console.log('[quiz] Supabase upsert response', {
           error: error?.message,
+          errorCode: error?.code,
           hasData: !!data,
-          dataLength: data?.length
+          dataLength: data?.length,
+          returnedQuizStatus: data?.[0]?.quiz?.status,
         });
 
         if (error) {
-          throw new Error(`Supabase error: ${error.message}`);
+          throw new Error(`Supabase error: ${error.message} (code: ${error.code})`);
         }
 
         // Detect silent RLS failure: upsert returns no error but also no data
         // When RLS blocks an insert/update, Supabase returns { data: [], error: null }
         if (!data || data.length === 0) {
-          console.warn('[quiz] Possible RLS silent failure - no data returned');
+          console.warn('[quiz] Possible RLS silent failure - no data returned from upsert');
           // Verify by reading back the profile
           const { data: verifyData, error: verifyError } = await supabase
             .from('profiles')
@@ -173,16 +173,30 @@ export function QuizProvider({ children }: { children: React.ReactNode }) {
             .eq('id', user.id)
             .single();
 
+          console.log('[quiz] Verification read result:', {
+            verifyError: verifyError?.message,
+            hasVerifyData: !!verifyData,
+            verifyQuizStatus: verifyData?.quiz?.status,
+            verifyQuizGoal: verifyData?.quiz?.state?.goal,
+          });
+
           if (verifyError) {
             throw new Error(`Verification failed: ${verifyError.message}`);
           }
 
-          // Check if the quiz was actually saved
+          // Check if the quiz was actually saved with correct status
           const savedStatus = verifyData?.quiz?.status;
           if (savedStatus !== nextStatus) {
+            console.error('[quiz] Status mismatch after save', { savedStatus, expected: nextStatus });
             throw new Error('Quiz save verification failed - data may not have been persisted due to RLS policy');
           }
           console.log('[quiz] Verification successful - quiz was saved despite empty upsert response');
+        } else {
+          // Verify the returned data has the correct status
+          const returnedStatus = data[0]?.quiz?.status;
+          if (returnedStatus !== nextStatus) {
+            console.warn('[quiz] Returned status does not match expected', { returnedStatus, expected: nextStatus });
+          }
         }
 
         // Success - reset local changes flag and refresh
@@ -254,6 +268,9 @@ export function QuizProvider({ children }: { children: React.ReactNode }) {
       userId: user?.id,
       hasProfile: !!user?.profile,
       hasQuiz: !!user?.profile?.quiz,
+      profileQuizStatus: user?.profile?.quiz?.status,
+      profileQuizGoal: user?.profile?.quiz?.state?.goal,
+      currentLocalStatus: status,
       hasLocalChanges: hasLocalChanges.current,
     });
 
@@ -264,14 +281,18 @@ export function QuizProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (user?.profile?.quiz) {
-      console.log('[quiz] Hydrating from profile', user.profile.quiz);
+      console.log('[quiz] Hydrating from profile', {
+        status: user.profile.quiz.status,
+        goal: user.profile.quiz.state?.goal,
+        updatedAt: user.profile.quiz.updatedAt,
+      });
       hydrateFromProfile(user.profile.quiz);
     } else if (!user?.id) {
       console.log('[quiz] No user - resetting quiz');
       // Only reset if user is logged out, not just if profile.quiz is null
       resetQuiz();
     } else {
-      console.log('[quiz] User exists but no quiz data in profile');
+      console.log('[quiz] User exists but no quiz data in profile - this may indicate a save failure');
     }
   }, [user?.id, user?.profile?.quiz, hydrateFromProfile]);
 
