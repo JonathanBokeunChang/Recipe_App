@@ -118,9 +118,18 @@ async function fetchProfile(userId: string): Promise<Profile | null> {
 
 async function upsertProfile(userId: string, email?: string | null): Promise<boolean> {
   try {
+    // First, fetch existing profile to preserve quiz data
+    const { data: existing } = await supabase
+      .from('profiles')
+      .select('quiz')
+      .eq('id', userId)
+      .maybeSingle();
+
     const { error } = await supabase.from('profiles').upsert({
       id: userId,
       email: email ?? undefined,
+      // Preserve existing quiz data - only include if it exists to avoid overwriting
+      ...(existing?.quiz && { quiz: existing.quiz }),
       updated_at: new Date().toISOString(),
     });
     if (error) {
