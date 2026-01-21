@@ -11,6 +11,8 @@ import { useQuiz } from '@/components/quiz-state';
 import { saveRecipeToLibrary } from '@/lib/recipe-library';
 import { useRecipeLibrary } from '@/lib/recipe-library-context';
 import { logAuthState } from '@/supabaseClient';
+import { ConditionWarnings } from '@/components/ConditionWarnings';
+import { analyzeRecipeForConditions } from '@/lib/dietary-guardrails';
 
 type VideoSource = 'tiktok';
 
@@ -86,6 +88,16 @@ export default function PasteLinkScreen() {
   const [saveMessage, setSaveMessage] = React.useState<string | null>(null);
   const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const conditionWarnings = React.useMemo(
+    () => analyzeRecipeForConditions(resultPreview, quiz.conditions),
+    [resultPreview, quiz.conditions]
+  );
+
+  const modifiedConditionWarnings = React.useMemo(
+    () => analyzeRecipeForConditions(modifiedRecipe?.modifiedRecipe ?? null, quiz.conditions),
+    [modifiedRecipe, quiz.conditions]
+  );
+
   const validate = () => {
     const result = parseVideoLink(input);
     if (!result.ok) {
@@ -160,6 +172,7 @@ export default function PasteLinkScreen() {
       allergens: quiz.allergens,
       avoidList: quiz.avoidList,
       pace: quiz.pace,
+      conditions: quiz.conditions,
     };
 
     try {
@@ -454,6 +467,9 @@ export default function PasteLinkScreen() {
                 {resultPreview.macros?.protein ?? '?'} C{resultPreview.macros?.carbs ?? '?'} F
                 {resultPreview.macros?.fat ?? '?'}
               </Text>
+              {conditionWarnings.length ? (
+                <ConditionWarnings warnings={conditionWarnings} />
+              ) : null}
               <View style={styles.section}>
                 <Pressable
                   style={[
@@ -591,6 +607,13 @@ export default function PasteLinkScreen() {
                     </Text>
                   </View>
                 </View>
+
+                {modifiedConditionWarnings.length ? (
+                  <ConditionWarnings
+                    warnings={modifiedConditionWarnings}
+                    title="Dietary alerts (modified)"
+                  />
+                ) : null}
 
                 {/* Top Macro Drivers */}
                 {modifiedRecipe.analysis?.topMacroDrivers?.length ? (

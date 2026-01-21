@@ -253,6 +253,12 @@ function isCandidateAllowed(candidate, userContext, originalName = '') {
   const diet = (userContext.dietStyle || '').toLowerCase();
   const avoidText = (userContext.avoidList || '').toLowerCase();
   const avoidTerms = avoidText ? avoidText.split(/[,;]/).map((s) => s.trim()).filter(Boolean) : [];
+  const conditions = new Set(
+    Array.isArray(userContext.conditions)
+      ? userContext.conditions.map((c) => String(c).toLowerCase().trim())
+      : []
+  );
+  const candidateName = (candidate.name || '').toLowerCase();
 
   if (candidate.allergens?.length) {
     for (const allergen of candidate.allergens) {
@@ -281,11 +287,33 @@ function isCandidateAllowed(candidate, userContext, originalName = '') {
 
   for (const term of avoidTerms) {
     if (!term) continue;
-    if (candidate.name.toLowerCase().includes(term)) return false;
+    if (candidateName.includes(term)) return false;
+  }
+
+  // Medical condition guardrails (lightweight filtering)
+  if (conditions.has('celiac')) {
+    const glutenHits = ['flour', 'wheat', 'barley', 'rye', 'malt', 'bread', 'panko'];
+    if (glutenHits.some((kw) => candidateName.includes(kw))) return false;
+  }
+  if (conditions.has('diabetes')) {
+    const sugarHits = ['sugar', 'syrup', 'honey', 'sweetened'];
+    if (sugarHits.some((kw) => candidateName.includes(kw))) return false;
+  }
+  if (conditions.has('hypertension')) {
+    const sodiumHits = ['soy sauce', 'salt', 'bacon', 'sausage', 'ham', 'broth', 'bouillon', 'cured'];
+    if (sodiumHits.some((kw) => candidateName.includes(kw))) return false;
+  }
+  if (conditions.has('high_cholesterol')) {
+    const satFatHits = ['butter', 'cream', 'cheese', 'bacon', 'sausage', 'ribeye', 'short rib', 'pork belly', 'lard', 'ghee'];
+    if (satFatHits.some((kw) => candidateName.includes(kw))) return false;
+  }
+  if (conditions.has('kidney')) {
+    const renalHits = ['soy sauce', 'salt', 'broth', 'spinach', 'tomato', 'potato', 'beans', 'lentil', 'avocado'];
+    if (renalHits.some((kw) => candidateName.includes(kw))) return false;
   }
 
   // Avoid suggesting the exact same ingredient
-  if (originalName && candidate.name.toLowerCase().includes(originalName.toLowerCase())) {
+  if (originalName && candidateName.includes(originalName.toLowerCase())) {
     return false;
   }
 

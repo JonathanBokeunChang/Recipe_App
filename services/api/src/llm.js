@@ -6,6 +6,27 @@ import { buildSubstitutionPlan } from './substitutions/engine.js';
 import { estimateMacros } from './macros.js';
 import { hasFdcKey } from './fdc.js';
 
+function normalizeUserContext(userContext = {}) {
+  const ctx = { ...(userContext || {}) };
+  const conditions = Array.isArray(ctx.conditions)
+    ? ctx.conditions.filter((c) => typeof c === 'string')
+    : [];
+  ctx.conditions = conditions;
+
+  const allergenSet = new Set(
+    Array.isArray(ctx.allergens)
+      ? ctx.allergens.map((a) => String(a).toLowerCase())
+      : []
+  );
+
+  if (conditions.includes('celiac')) {
+    allergenSet.add('gluten');
+  }
+
+  ctx.allergens = Array.from(allergenSet);
+  return ctx;
+}
+
 export async function generateRecipeFromVideo({ videoPath, url }) {
   const config = getLlmConfig();
 
@@ -321,6 +342,7 @@ export async function modifyRecipeForGoal(recipe, goalType, userContext = {}) {
   let macroMs = 0;
   let substitutionMs = 0;
   let geminiMs = 0;
+  const safeUserContext = normalizeUserContext(userContext);
 
   try {
     console.info('[llm] modifying recipe for goal:', goalType);
@@ -343,7 +365,7 @@ export async function modifyRecipeForGoal(recipe, goalType, userContext = {}) {
         macroMs = Date.now() - macroStart;
 
         const substitutionStart = Date.now();
-        substitutionPlan = await buildSubstitutionPlan(recipe, goalType, userContext, macroEstimate);
+        substitutionPlan = await buildSubstitutionPlan(recipe, goalType, safeUserContext, macroEstimate);
         substitutionMs = Date.now() - substitutionStart;
       } catch (err) {
         console.warn('[llm] substitution plan failed:', err?.message);
@@ -360,7 +382,7 @@ export async function modifyRecipeForGoal(recipe, goalType, userContext = {}) {
       }
     });
 
-    const prompt = buildModificationPrompt(recipe, goalType, userContext, substitutionPlan);
+    const prompt = buildModificationPrompt(recipe, goalType, safeUserContext, substitutionPlan);
     const geminiStart = Date.now();
     const result = await model.generateContent(prompt);
     geminiMs = Date.now() - geminiStart;

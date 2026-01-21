@@ -8,6 +8,8 @@ type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'active' | 'very_activ
 type DietStyle = 'none' | 'vegetarian' | 'vegan' | 'pescatarian';
 type WeightUnit = 'kg' | 'lb';
 type HeightUnit = 'cm' | 'imperial';
+export type DietaryCondition = 'celiac' | 'diabetes' | 'hypertension' | 'kidney' | 'high_cholesterol';
+const allowedConditions: DietaryCondition[] = ['celiac', 'diabetes', 'hypertension', 'kidney', 'high_cholesterol'];
 
 export type QuizState = {
   biologicalSex: BiologicalSex | null;
@@ -25,6 +27,7 @@ export type QuizState = {
   dietStyle: DietStyle;
   allergens: string[];
   avoidList: string;
+  conditions: DietaryCondition[];
 };
 
 type QuizStatus = 'pending' | 'in_progress' | 'completed' | 'skipped';
@@ -55,6 +58,7 @@ const defaultState: QuizState = {
   dietStyle: 'none',
   allergens: [],
   avoidList: '',
+  conditions: [],
 };
 
 const QuizContext = createContext<QuizContextValue | undefined>(undefined);
@@ -105,6 +109,11 @@ export function QuizProvider({ children }: { children: React.ReactNode }) {
       allergens: Array.isArray(payload.allergens)
         ? payload.allergens.filter((a: unknown) => typeof a === 'string')
         : defaultState.allergens,
+      conditions: Array.isArray(payload.conditions)
+        ? payload.conditions
+            .map((c: unknown) => (typeof c === 'string' ? c : null))
+            .filter((c): c is DietaryCondition => Boolean(c) && allowedConditions.includes(c as DietaryCondition))
+        : defaultState.conditions,
     }));
     setStatus(nextStatus);
   }, []);
@@ -240,9 +249,9 @@ export function QuizProvider({ children }: { children: React.ReactNode }) {
   const completeQuiz = async () => {
     console.log('[quiz] completeQuiz called', { quiz, userId: user?.id, currentStatus: status });
 
-    // If already completed, just ensure local status is set and skip the save
-    if (status === 'completed') {
-      console.log('[quiz] Quiz already completed, skipping save');
+    // If already completed and nothing changed, avoid redundant writes
+    if (status === 'completed' && !hasLocalChanges.current) {
+      console.log('[quiz] Quiz already completed with no local changes - skipping save');
       return;
     }
 

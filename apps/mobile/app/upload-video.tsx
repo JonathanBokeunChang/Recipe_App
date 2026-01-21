@@ -12,6 +12,8 @@ import { useAuth } from '@/components/auth';
 import { useQuiz } from '@/components/quiz-state';
 import { saveRecipeToLibrary } from '@/lib/recipe-library';
 import { useRecipeLibrary } from '@/lib/recipe-library-context';
+import { ConditionWarnings } from '@/components/ConditionWarnings';
+import { analyzeRecipeForConditions } from '@/lib/dietary-guardrails';
 
 const isWeb = Platform.OS === 'web';
 
@@ -40,6 +42,16 @@ export default function UploadVideoScreen() {
   // Save state
   const [saveStatus, setSaveStatus] = React.useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [saveMessage, setSaveMessage] = React.useState<string | null>(null);
+
+  const conditionWarnings = React.useMemo(
+    () => analyzeRecipeForConditions(recipe, quiz.conditions),
+    [recipe, quiz.conditions]
+  );
+
+  const modifiedConditionWarnings = React.useMemo(
+    () => analyzeRecipeForConditions(modifiedRecipe?.modifiedRecipe ?? null, quiz.conditions),
+    [modifiedRecipe, quiz.conditions]
+  );
 
   const pickAndUploadVideo = async () => {
     try {
@@ -203,6 +215,7 @@ export default function UploadVideoScreen() {
       allergens: quiz.allergens,
       avoidList: quiz.avoidList,
       pace: quiz.pace,
+      conditions: quiz.conditions,
     };
 
     try {
@@ -410,6 +423,9 @@ export default function UploadVideoScreen() {
                 {recipe.macros?.protein ?? '?'} C{recipe.macros?.carbs ?? '?'} F
                 {recipe.macros?.fat ?? '?'}
               </Text>
+              {conditionWarnings.length ? (
+                <ConditionWarnings warnings={conditionWarnings} />
+              ) : null}
 
               {/* Save Button */}
               <View style={styles.section}>
@@ -551,6 +567,13 @@ export default function UploadVideoScreen() {
                     </Text>
                   </View>
                 </View>
+
+                {modifiedConditionWarnings.length ? (
+                  <ConditionWarnings
+                    warnings={modifiedConditionWarnings}
+                    title="Dietary alerts (modified)"
+                  />
+                ) : null}
 
                 {/* Changes Made */}
                 <View style={styles.section}>

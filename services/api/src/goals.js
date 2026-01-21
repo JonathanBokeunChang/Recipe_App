@@ -36,6 +36,14 @@ export const GOAL_CONFIGS = {
   }
 };
 
+const CONDITION_LABELS = {
+  celiac: 'Celiac (strict gluten-free)',
+  diabetes: 'Diabetes / blood sugar',
+  hypertension: 'Hypertension',
+  high_cholesterol: 'High cholesterol',
+  kidney: 'Kidney-friendly',
+};
+
 /**
  * Build the modification prompt with strict target matching requirements.
  * Accepts optional user context (quiz answers) to honor constraints and substitution plan.
@@ -52,6 +60,7 @@ export function buildModificationPrompt(
   }
 
   const userProfile = formatUserContext(userContext);
+  const conditionGuardrails = formatConditionGuardrails(userContext);
   const substitutionGuide = formatSubstitutionPlanForPrompt(substitutionPlan);
 
   return `You are a nutrition optimization expert. Your job is to modify recipes to hit specific macro targets.
@@ -83,6 +92,9 @@ ${recipe.steps.map((step, i) => `${i + 1}. ${step}`).join('\n')}
 
 ## USER PROFILE & CONSTRAINTS (from quiz)
 ${userProfile}
+
+## MEDICAL / DIETARY GUARDRAILS
+${conditionGuardrails}
 
 ## USDA-GUIDED SUBSTITUTION CANDIDATES (precomputed; DO NOT invent outside these)
 ${substitutionGuide}
@@ -140,9 +152,10 @@ You MUST modify ingredients to reach your Phase 1 targets. The final recipe macr
 3. Each modification MUST include the exact macro impact (macroDelta)
 4. The sum of original macros + all macroDelta values MUST equal the new macros
 5. Update cooking steps if your substitutions require different preparation
-6. NEVER include ingredients that conflict with allergens, diet style, or avoid-list above
+6. NEVER include ingredients that conflict with allergens, diet style, avoid-list, OR the medical guardrails above (celiac = zero gluten; hypertension = lower sodium; diabetes = lower glycemic load; kidney = moderate sodium/potassium; high_cholesterol = lower saturated fat)
 7. Use ONLY the USDA candidate options above; if none are available for an ingredient, prefer portion adjustments or adds from the provided playbook rather than inventing new ingredients
 8. Prioritize candidates with tasteScore/textureScore >= 4 and commonness >= 4 to preserve flavor and function; avoid uncommon or high-risk swaps
+9. If you cannot fully satisfy a medical guardrail, choose the safest option available AND include a warning in the warnings array explaining the tradeoff
 
 ---
 
@@ -211,6 +224,9 @@ IMPORTANT REQUIREMENTS:
 
 function formatUserContext(ctx) {
   const lines = [];
+  const conditions = Array.isArray(ctx?.conditions)
+    ? ctx.conditions.filter((c) => typeof c === 'string')
+    : [];
   if (ctx.biologicalSex) lines.push(`- Sex: ${ctx.biologicalSex}`);
   if (ctx.age) lines.push(`- Age: ${ctx.age}`);
   if (ctx.heightCm) lines.push(`- Height: ${ctx.heightCm} cm`);
@@ -219,6 +235,10 @@ function formatUserContext(ctx) {
   if (ctx.activityLevel) lines.push(`- Activity: ${ctx.activityLevel}`);
   if (ctx.pace) lines.push(`- Pace (1-5): ${ctx.pace}`);
   if (ctx.dietStyle && ctx.dietStyle !== 'none') lines.push(`- Diet style: ${ctx.dietStyle}`);
+  if (conditions.length) {
+    const readable = conditions.map((c) => CONDITION_LABELS[c] || c);
+    lines.push(`- Conditions: ${readable.join(', ')}`);
+  }
   if (Array.isArray(ctx.allergens) && ctx.allergens.length) {
     lines.push(`- Allergens to avoid: ${ctx.allergens.join(', ')}`);
   }
@@ -227,6 +247,36 @@ function formatUserContext(ctx) {
   if (!lines.length) {
     return '- No additional user constraints provided';
   }
+  return lines.join('\n');
+}
+
+function formatConditionGuardrails(ctx) {
+  const conditions = Array.isArray(ctx?.conditions)
+    ? ctx.conditions.filter((c) => typeof c === 'string')
+    : [];
+
+  if (!conditions.length) {
+    return '- None reported.';
+  }
+
+  const lines = [];
+
+  if (conditions.includes('celiac')) {
+    lines.push('- Celiac: recipe MUST be gluten-free. Exclude wheat, barley, rye, malt, standard soy sauce/beer; prefer gluten-free flours, tamari, rice/corn starches.');
+  }
+  if (conditions.includes('diabetes')) {
+    lines.push('- Diabetes: keep carbs lower-glycemic, minimize added sugars, prefer fiber-rich swaps, and note carb counts after edits.');
+  }
+  if (conditions.includes('hypertension')) {
+    lines.push('- Hypertension: lower sodium. Avoid salty cured meats and high-sodium sauces; choose low-sodium alternatives.');
+  }
+  if (conditions.includes('high_cholesterol')) {
+    lines.push('- High cholesterol: reduce saturated fat. Favor lean proteins and plant oils over butter/cream/fatty cuts.');
+  }
+  if (conditions.includes('kidney')) {
+    lines.push('- Kidney-friendly: moderate sodium, potassium-heavy items (tomato, potato, spinach), and very high protein portions.');
+  }
+
   return lines.join('\n');
 }
 

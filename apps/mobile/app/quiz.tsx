@@ -40,6 +40,13 @@ const dietOptions = [
 ];
 
 const allergenOptions = ['nuts', 'dairy', 'shellfish', 'gluten', 'soy', 'eggs', 'sesame'];
+const conditionOptions: { value: QuizState['conditions'][number]; label: string; note: string }[] = [
+  { value: 'celiac', label: 'Celiac / gluten-free', note: 'Avoid wheat, barley, rye, malt, and cross-contamination' },
+  { value: 'diabetes', label: 'Diabetes / blood sugar', note: 'Prefer low added sugar, higher fiber, steady carbs' },
+  { value: 'hypertension', label: 'Hypertension', note: 'Limit sodium and heavy processed meats' },
+  { value: 'high_cholesterol', label: 'High cholesterol', note: 'Favor lean proteins; reduce saturated fat' },
+  { value: 'kidney', label: 'Kidney-friendly', note: 'Keep sodium/potassium moderate; avoid heavy protein overloads' },
+];
 
 function kgToLb(kg: number) {
   return kg * 2.20462;
@@ -260,6 +267,14 @@ export default function QuizScreen() {
     const exists = quiz.allergens.includes(value);
     const next = exists ? quiz.allergens.filter((a) => a !== value) : [...quiz.allergens, value];
     updateQuiz({ allergens: next });
+  };
+
+  const toggleCondition = (value: QuizState['conditions'][number]) => {
+    const exists = quiz.conditions.includes(value);
+    const next = exists
+      ? quiz.conditions.filter((c) => c !== value)
+      : [...quiz.conditions, value];
+    updateQuiz({ conditions: next });
   };
 
   return (
@@ -508,6 +523,19 @@ export default function QuizScreen() {
                 />
               ))}
             </ChipRow>
+
+            <SectionLabel>Medical considerations</SectionLabel>
+            <OptionGrid>
+              {conditionOptions.map((item) => (
+                <OptionTile
+                  key={item.value}
+                  label={item.label}
+                  note={item.note}
+                  selected={quiz.conditions.includes(item.value)}
+                  onPress={() => toggleCondition(item.value)}
+                />
+              ))}
+            </OptionGrid>
 
             <SectionLabel>Allergens / avoid</SectionLabel>
             <ChipRow>
