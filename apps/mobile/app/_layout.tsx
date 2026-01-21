@@ -191,6 +191,10 @@ function RootLayoutNav() {
           name="paste-link"
           options={{ title: 'Paste video link', headerBackTitle: 'Back' }}
         />
+        <Stack.Screen
+          name="upload-recipe-image"
+          options={{ title: 'Scan recipe photo', headerBackTitle: 'Back' }}
+        />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>
     </ThemeProvider>

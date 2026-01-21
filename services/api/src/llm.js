@@ -101,6 +101,101 @@ export async function generateRecipeFromVideo({ videoPath, url }) {
 }
 
 /**
+ * Generate a structured recipe from an uploaded image (typed or handwritten)
+ * @param {Object} params - Parameters object
+ * @param {string} params.imagePath - Path to the uploaded image file
+ * @param {string} [params.mimeType] - MIME type of the image
+ * @param {string|null} [params.url] - Optional source URL (unused for uploads)
+ * @param {string} [params.originalName] - Original filename for logging
+ * @returns {Promise<Object>} Normalized recipe object
+ */
+export async function generateRecipeFromImage({ imagePath, mimeType, url, originalName }) {
+  const config = getLlmConfig();
+  const allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+  const safeMime = allowedMimes.includes(mimeType || '') ? mimeType : 'image/jpeg';
+
+  try {
+    console.info('[llm] uploading recipe image to Gemini', {
+      mimeType: safeMime,
+      originalName,
+    });
+
+    const genAI = createClient();
+    const fileManager = new GoogleAIFileManager(process.env.GEMINI_API_KEY);
+
+    const uploadResult = await fileManager.uploadFile(imagePath, {
+      mimeType: safeMime,
+      displayName: originalName || 'recipe-image',
+    });
+
+    let file = await fileManager.getFile(uploadResult.file.name);
+    while (file.state === 'PROCESSING') {
+      await new Promise((resolve) => setTimeout(resolve, 750));
+      file = await fileManager.getFile(uploadResult.file.name);
+    }
+
+    if (file.state === 'FAILED') {
+      throw new Error('Image processing failed on Gemini servers');
+    }
+
+    console.info('[llm] image processed, generating recipe with model', config.model);
+
+    const model = genAI.getGenerativeModel({
+      model: config.model,
+      generationConfig: {
+        temperature: 0.28,
+        responseMimeType: 'application/json',
+      },
+    });
+
+    const prompt = `${IMAGE_SYSTEM_PROMPT}
+
+Source details:
+- This is a user-uploaded recipe photo or scan (could be handwritten or typed).
+- Preserve any dietary notes (gluten-free, dairy-free, etc.) and allergy warnings if present.
+- If units are missing or illegible, infer realistic amounts and call them out in assumptions.
+- Favor concise, mobile-friendly wording.`;
+
+    const result = await model.generateContent([
+      {
+        fileData: {
+          fileUri: file.uri,
+          mimeType: file.mimeType,
+        },
+      },
+      { text: prompt },
+    ]);
+
+    const response = result.response;
+    const message = response.text();
+
+    if (!message) {
+      throw new Error('Recipe model returned no content.');
+    }
+
+    try {
+      await fileManager.deleteFile(uploadResult.file.name);
+      console.info('[llm] cleaned up uploaded image file');
+    } catch (cleanupErr) {
+      console.warn('[llm] failed to cleanup uploaded image file:', cleanupErr?.message);
+    }
+
+    const parsed = JSON.parse(message);
+    return normalizeRecipe(parsed, {
+      url,
+      videoAnalysis: false,
+      transcriptBased: false,
+      captionBased: false,
+      imageBased: true,
+      ocrConfidence: parsed.confidence?.ocrConfidence,
+    });
+  } catch (err) {
+    console.warn('[llm] image recipe extraction failed:', err?.message ?? err);
+    return buildFallbackRecipe({ url, reason: 'image_processing_failed' });
+  }
+}
+
+/**
  * Generate recipe from video transcript (text-based extraction)
  * Complements existing generateRecipeFromVideo() for user uploads
  * This is ToS-compliant as it doesn't download TikTok videos
@@ -184,10 +279,19 @@ function createClient() {
   return new GoogleGenerativeAI(apiKey);
 }
 
-function normalizeRecipe(recipe, { url, videoAnalysis, transcriptBased, transcriptConfidence, captionBased }) {
+function normalizeRecipe(
+  recipe,
+  { url, videoAnalysis, transcriptBased, transcriptConfidence, captionBased, imageBased, ocrConfidence }
+) {
   let source = 'gemini-video';
+  if (imageBased) source = 'gemini-image';
   if (transcriptBased) source = 'gemini-transcript';
   if (captionBased) source = 'gemini-caption';
+  if (recipe?.confidence?.source === 'gemini-image') source = 'gemini-image';
+  if (recipe?.confidence?.source === 'fallback-heuristic' && !videoAnalysis) {
+    source = recipe.confidence.source;
+  }
+  if (recipe?.confidence?.imageBased) source = 'gemini-image';
 
   return {
     title: recipe.title || 'Generated Recipe',
@@ -203,6 +307,8 @@ function normalizeRecipe(recipe, { url, videoAnalysis, transcriptBased, transcri
       transcriptBased: transcriptBased || false,
       captionBased: captionBased || false,
       transcriptConfidence: transcriptConfidence || undefined,
+      imageBased: imageBased || recipe?.confidence?.imageBased || source === 'gemini-image',
+      ocrConfidence: ocrConfidence ?? recipe?.confidence?.ocrConfidence,
       ...(recipe.confidence || {})
     },
     sourceUrl: url
@@ -447,4 +553,36 @@ Rules:
 - For timing: prepMinutes = prep work before heat, cookMinutes = active cooking time
 - Be specific with ingredient names (e.g., "all-purpose flour" not just "flour")
 - Include cooking temperatures if mentioned (e.g., "Preheat oven to 350°F")
+`;
+
+const IMAGE_SYSTEM_PROMPT = `
+You are a culinary AI that turns photos or scans of recipes into structured, editable recipes with macros.
+
+The input is a single image that may contain:
+- A typed recipe page (cookbook, blog printout, screenshot)
+- A handwritten recipe card or notebook page (may be messy or tilted)
+- Mixed text with headings, ingredient lists, and instructions
+
+Carefully read all visible text (perform OCR). If handwriting is ambiguous, choose the most likely interpretation and note assumptions.
+
+Respond ONLY with a JSON object matching this exact shape:
+{
+  "title": string,
+  "servings": number,
+  "ingredients": [{ "name": string, "quantity": string }],
+  "steps": [string],
+  "times": { "prepMinutes": number, "cookMinutes": number },
+  "macros": { "calories": number, "protein": number, "carbs": number, "fat": number },
+  "assumptions": [string],
+  "confidence": { "source": "gemini-image", "ocrConfidence": number }
+}
+
+Rules:
+- Convert shorthand to clear quantities (e.g., "1/2 tsp", "350F 20m" → "Preheat oven to 350°F; bake 20 minutes")
+- Preserve every ingredient and amount; if an amount is missing, infer a realistic default and explain it in assumptions
+- Normalize ingredient names (e.g., "AP flour" → "all-purpose flour"); keep any dietary labels
+- Steps must be chronological and actionable; split combined directions into numbered steps
+- Estimate servings if not provided; default to 2
+- Provide per-serving macros; estimate from the ingredient list when not stated
+- Use assumptions to flag illegible text, inferred cook times, or guessed quantities
 `;

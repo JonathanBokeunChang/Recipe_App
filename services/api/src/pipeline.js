@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { runCommand } from './exec.js';
-import { generateRecipeFromVideo, generateRecipeFromTranscript, generateRecipeFromCaption } from './llm.js';
+import { generateRecipeFromVideo, generateRecipeFromTranscript, generateRecipeFromCaption, generateRecipeFromImage } from './llm.js';
 import { normalizeTikTokUrl } from './tiktok.js';
 import { getTikTokOEmbed } from './tiktok-oembed.js';
 import { extractTikTokTranscript } from './transcript-api.js';
@@ -304,6 +304,66 @@ export async function runLocalVideoPipeline({ videoPath }) {
     steps,
     metadata: {
       method: 'video_upload'
+    },
+    durationMs: Date.now() - startedAt,
+  };
+}
+
+/**
+ * Pipeline for user-uploaded recipe images (handwritten or typed)
+ * @param {Object} params - Parameters object
+ * @param {string} params.imagePath - Path to the uploaded image
+ * @param {string} [params.originalName] - Original filename for metadata
+ * @param {string} [params.mimeType] - MIME type of the image
+ * @returns {Promise<Object>} Pipeline result with recipe, steps, and metadata
+ */
+export async function runRecipeImagePipeline({ imagePath, originalName, mimeType }) {
+  const steps = [];
+  const startedAt = Date.now();
+
+  const runStep = async (name, fn) => {
+    const stepStart = Date.now();
+    console.info(`[step:start] ${name}`);
+    try {
+      const result = await fn();
+      console.info(`[step:ok] ${name} ${Date.now() - stepStart}ms`);
+      steps.push({
+        name,
+        status: 'completed',
+        durationMs: Date.now() - stepStart,
+      });
+      return result;
+    } catch (err) {
+      console.error(
+        `[step:fail] ${name} ${Date.now() - stepStart}ms`,
+        err?.message ?? err
+      );
+      steps.push({
+        name,
+        status: 'failed',
+        durationMs: Date.now() - stepStart,
+        error: err?.message ?? String(err),
+      });
+      throw err;
+    }
+  };
+
+  const recipe = await runStep('gemini_image_recipe', async () => {
+    return await generateRecipeFromImage({
+      imagePath,
+      mimeType,
+      url: null,
+      originalName,
+    });
+  });
+
+  return {
+    recipe,
+    steps,
+    metadata: {
+      method: 'recipe_image',
+      originalName,
+      mimeType,
     },
     durationMs: Date.now() - startedAt,
   };

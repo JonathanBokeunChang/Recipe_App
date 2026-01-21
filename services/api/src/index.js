@@ -5,7 +5,7 @@ import os from 'node:os';
 import fs from 'node:fs';
 import { nanoid } from 'nanoid';
 import { logEnvStatus } from './env.js';
-import { runTikTokPipeline, runTikTokPipelineCompliant, runLocalVideoPipeline } from './pipeline.js';
+import { runTikTokPipeline, runTikTokPipelineCompliant, runLocalVideoPipeline, runRecipeImagePipeline } from './pipeline.js';
 import { normalizeTikTokUrl } from './tiktok.js';
 import { JobStore } from './store.js';
 import { modifyRecipeForGoal } from './llm.js';
@@ -30,6 +30,21 @@ const upload = multer({
       cb(null, true);
     } else {
       cb(new Error('Invalid file type. Only MP4, MOV, AVI, MPEG allowed.'));
+    }
+  }
+});
+
+const imageUpload = multer({
+  dest: os.tmpdir(),
+  limits: { fileSize: 15 * 1024 * 1024 }, // 15MB limit
+  fileFilter: (req, file, cb) => {
+    const allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+    const name = file.originalname?.toLowerCase() || '';
+    const hasValidExt = /\.(jpg|jpeg|png|webp|heic|heif)$/i.test(name);
+    if (allowedMimes.includes(file.mimetype) || hasValidExt) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Upload a JPG, PNG, WEBP, or HEIC image.'));
     }
   }
 });
@@ -222,6 +237,130 @@ app.post('/api/upload-video', (req, res, next) => {
     }
 
     res.status(500).json({ error: err?.message ?? 'Video upload failed' });
+  }
+});
+
+/**
+ * NEW: Recipe image upload endpoint
+ * POST /api/upload-recipe-image
+ * Body: multipart/form-data with 'image' field (typed or handwritten recipe photo)
+ */
+app.post('/api/upload-recipe-image', (req, res, next) => {
+  const contentType = req.get('content-type') || '';
+  console.log('[upload-image] Request received:', {
+    contentType,
+    contentLength: req.get('content-length'),
+    method: req.method,
+    hasBoundary: contentType.includes('boundary='),
+  });
+
+  if (!contentType.includes('multipart/form-data')) {
+    console.error('[upload-image] Invalid content-type:', contentType);
+    return res.status(400).json({
+      error: 'Content-Type must be multipart/form-data',
+      received: contentType || '(none)',
+    });
+  }
+
+  if (!contentType.includes('boundary=')) {
+    console.error('[upload-image] Missing boundary in content-type:', contentType);
+    return res.status(400).json({
+      error: 'Missing boundary in Content-Type header',
+      hint: 'multipart/form-data requests require a boundary parameter',
+      received: contentType,
+    });
+  }
+
+  next();
+}, (req, res, next) => {
+  imageUpload.single('image')(req, res, (err) => {
+    if (err) {
+      console.error('[upload-image] Multer error:', {
+        name: err.name,
+        message: err.message,
+        code: err.code,
+      });
+      return next(err);
+    }
+    next();
+  });
+}, async (req, res) => {
+  try {
+    console.log('[upload-image] After multer middleware:', {
+      hasFile: !!req.file,
+      hasBody: !!req.body,
+      bodyKeys: Object.keys(req.body || {}),
+    });
+
+    if (!req.file) {
+      console.error('[upload-image] No file received');
+      return res.status(400).json({ error: 'No image file provided' });
+    }
+
+    console.log('[upload-image] Received image upload:', {
+      filename: req.file.originalname,
+      size: req.file.size,
+      mimetype: req.file.mimetype,
+    });
+
+    const jobId = nanoid();
+    const imagePath = req.file.path;
+
+    const job = {
+      id: jobId,
+      status: 'queued',
+      provider: 'recipe_image',
+      sourceUrl: null,
+      imagePath,
+      originalName: req.file.originalname,
+      mimeType: req.file.mimetype,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    await store.create(job);
+
+    (async () => {
+      try {
+        await store.update(jobId, { status: 'processing' });
+
+        const result = await runRecipeImagePipeline({
+          imagePath,
+          originalName: req.file.originalname,
+          mimeType: req.file.mimetype,
+        });
+
+        const { recipe, steps, metadata, durationMs } = result;
+
+        await store.update(jobId, {
+          status: 'completed',
+          result: recipe,
+          steps,
+          metadata,
+          durationMs,
+        });
+      } catch (err) {
+        console.error('[upload-image] Processing failed:', err);
+        await store.update(jobId, {
+          status: 'failed',
+          error: err?.message ?? 'Image processing failed',
+        });
+      } finally {
+        fs.unlink(imagePath, (err) => {
+          if (err) console.warn('[upload-image] failed to delete uploaded image:', err);
+          else console.log('[upload-image] cleaned up image file:', imagePath);
+        });
+      }
+    })();
+
+    res.status(202).json({ jobId, status: 'queued' });
+  } catch (err) {
+    console.error('[upload-image] image upload failed:', err);
+
+    if (req.file?.path) {
+      fs.unlink(req.file.path, () => {});
+    }
+
+    res.status(500).json({ error: err?.message ?? 'Image upload failed' });
   }
 });
 

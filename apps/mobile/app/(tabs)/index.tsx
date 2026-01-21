@@ -25,7 +25,7 @@ export default function TabOneScreen() {
           Signed in as {user?.kind === 'guest' ? 'Guest' : 'Member'}
         </Text>
         <Text style={styles.body}>
-          Start by pasting a video link or uploading a file to generate a recipe with macros.
+          Start by uploading a video, scanning a recipe photo, or pasting a link to generate a recipe with macros.
         </Text>
       </View>
 
@@ -78,6 +78,13 @@ export default function TabOneScreen() {
         <Pressable style={styles.primaryButton} onPress={() => router.push('/upload-video' as any)}>
           <Text style={styles.primaryButtonText}>Upload Video</Text>
           <Text style={styles.buttonSubtext}>Best quality</Text>
+        </Pressable>
+        <Pressable
+          style={styles.accentButton}
+          onPress={() => router.push('/upload-recipe-image')}
+        >
+          <Text style={styles.accentButtonText}>Scan Recipe Photo</Text>
+          <Text style={styles.buttonSubtext}>Handwritten or typed</Text>
         </Pressable>
         <Pressable
           style={styles.secondaryButton}
@@ -208,6 +215,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   secondaryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  accentButton: {
+    backgroundColor: '#0EA5E9',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  accentButtonText: {
+    color: '#F9FAFB',
     fontSize: 16,
     fontWeight: '600',
   },
