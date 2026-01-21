@@ -66,6 +66,14 @@ function formatDietStyle(style: string): string {
   return labels[style] ?? style;
 }
 
+const conditionLabels: Record<string, string> = {
+  celiac: 'Celiac / gluten-free',
+  diabetes: 'Diabetes / blood sugar',
+  hypertension: 'Hypertension',
+  high_cholesterol: 'High cholesterol',
+  kidney: 'Kidney-friendly',
+};
+
 function formatPace(pace: number): string {
   const labels: Record<number, string> = {
     1: 'Gentle',
@@ -202,6 +210,23 @@ export default function ProfileScreen() {
         <View style={styles.divider} lightColor="#E5E7EB" darkColor="#1F2937" />
 
         <InfoRow label="Diet style" value={formatDietStyle(quiz.dietStyle)} />
+
+        {quiz.conditions?.length ? (
+          <View style={styles.allergenRow}>
+            <Text style={styles.infoLabel}>Medical considerations</Text>
+            <View style={styles.chipContainer}>
+              {quiz.conditions.map((condition) => (
+                <View key={condition} style={styles.allergenChip}>
+                  <Text style={styles.allergenChipText}>
+                    {conditionLabels[condition] ?? condition}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : (
+          <InfoRow label="Medical considerations" value="None" />
+        )}
 
         {quiz.allergens.length > 0 ? (
           <View style={styles.allergenRow}>
