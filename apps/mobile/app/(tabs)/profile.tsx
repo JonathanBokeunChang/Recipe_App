@@ -6,6 +6,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/components/auth';
 import { useQuiz } from '@/components/quiz-state';
+import { PALETTE } from '@/constants/palette';
 
 // Helper functions for display formatting
 function formatDate(dateString: string | undefined): string {
@@ -130,12 +131,16 @@ export default function ProfileScreen() {
       </Text>
 
       {/* Account Info Card */}
-      <View style={styles.card} lightColor="#FFFFFF" darkColor="#0B0F19">
+      <View
+        style={styles.card}
+        lightColor={PALETTE.surface}
+        darkColor={PALETTE.surface}
+      >
         <View style={styles.cardHeader}>
-          <FontAwesome name="user-circle" size={20} color="#6B7280" />
+          <FontAwesome name="user-circle" size={20} color={PALETTE.mutedText} />
           <Text style={styles.cardTitle}>Account</Text>
         </View>
-        <View style={styles.divider} lightColor="#E5E7EB" darkColor="#1F2937" />
+        <View style={styles.divider} lightColor={PALETTE.border} darkColor={PALETTE.border} />
 
         <InfoRow label="Email" value={user?.email ?? 'Not set'} />
         <InfoRow label="Account type" value={user?.kind === 'member' ? 'Member' : 'Guest'} />
@@ -143,12 +148,16 @@ export default function ProfileScreen() {
       </View>
 
       {/* Body Stats Card */}
-      <View style={styles.card} lightColor="#FFFFFF" darkColor="#0B0F19">
+      <View
+        style={styles.card}
+        lightColor={PALETTE.surface}
+        darkColor={PALETTE.surface}
+      >
         <View style={styles.cardHeader}>
-          <FontAwesome name="heartbeat" size={20} color="#6B7280" />
+          <FontAwesome name="heartbeat" size={20} color={PALETTE.mutedText} />
           <Text style={styles.cardTitle}>Body Stats</Text>
         </View>
-        <View style={styles.divider} lightColor="#E5E7EB" darkColor="#1F2937" />
+        <View style={styles.divider} lightColor={PALETTE.border} darkColor={PALETTE.border} />
 
         {isQuizComplete ? (
           <>
@@ -179,12 +188,16 @@ export default function ProfileScreen() {
       </View>
 
       {/* Goals & Activity Card */}
-      <View style={styles.card} lightColor="#FFFFFF" darkColor="#0B0F19">
+      <View
+        style={styles.card}
+        lightColor={PALETTE.surface}
+        darkColor={PALETTE.surface}
+      >
         <View style={styles.cardHeader}>
-          <FontAwesome name="bullseye" size={20} color="#6B7280" />
+          <FontAwesome name="bullseye" size={20} color={PALETTE.mutedText} />
           <Text style={styles.cardTitle}>Goals & Activity</Text>
         </View>
-        <View style={styles.divider} lightColor="#E5E7EB" darkColor="#1F2937" />
+        <View style={styles.divider} lightColor={PALETTE.border} darkColor={PALETTE.border} />
 
         {isQuizComplete ? (
           <>
@@ -202,12 +215,16 @@ export default function ProfileScreen() {
       </View>
 
       {/* Diet & Safety Card */}
-      <View style={styles.card} lightColor="#FFFFFF" darkColor="#0B0F19">
+      <View
+        style={styles.card}
+        lightColor={PALETTE.surface}
+        darkColor={PALETTE.surface}
+      >
         <View style={styles.cardHeader}>
-          <FontAwesome name="leaf" size={20} color="#6B7280" />
+          <FontAwesome name="leaf" size={20} color={PALETTE.mutedText} />
           <Text style={styles.cardTitle}>Diet & Safety</Text>
         </View>
-        <View style={styles.divider} lightColor="#E5E7EB" darkColor="#1F2937" />
+        <View style={styles.divider} lightColor={PALETTE.border} darkColor={PALETTE.border} />
 
         <InfoRow label="Diet style" value={formatDietStyle(quiz.dietStyle)} />
 
@@ -269,6 +286,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: PALETTE.background,
   },
   content: {
     paddingHorizontal: 24,
@@ -278,18 +296,20 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 26,
-    fontWeight: '700',
+    fontWeight: '800',
+    color: PALETTE.text,
   },
   subtitle: {
     fontSize: 14,
     lineHeight: 20,
-    opacity: 0.8,
+    color: PALETTE.mutedText,
   },
   card: {
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: PALETTE.border,
+    backgroundColor: PALETTE.surface,
     gap: 12,
   },
   cardHeader: {
@@ -300,11 +320,13 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '800',
+    color: PALETTE.text,
   },
   divider: {
     height: 1,
     marginVertical: 4,
+    backgroundColor: PALETTE.border,
   },
   infoRow: {
     flexDirection: 'row',
@@ -315,14 +337,15 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     fontSize: 14,
-    opacity: 0.7,
+    color: PALETTE.mutedText,
     flex: 1,
   },
   infoValue: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '700',
     flex: 1,
     textAlign: 'right',
+    color: PALETTE.text,
   },
   allergenRow: {
     flexDirection: 'row',
@@ -339,15 +362,17 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   allergenChip: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: PALETTE.surfaceAlt,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: PALETTE.border,
   },
   allergenChipText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#991B1B',
+    fontWeight: '700',
+    color: PALETTE.accent,
   },
   incompleteNotice: {
     paddingVertical: 12,
@@ -356,31 +381,31 @@ const styles = StyleSheet.create({
   },
   incompleteText: {
     fontSize: 14,
-    opacity: 0.6,
+    color: PALETTE.mutedText,
     fontStyle: 'italic',
   },
   primaryButton: {
-    backgroundColor: '#111827',
+    backgroundColor: PALETTE.accent,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
     marginTop: 8,
   },
   primaryButtonText: {
-    color: '#F9FAFB',
+    color: '#031305',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '800',
   },
   signOutButton: {
-    borderColor: '#DC2626',
+    borderColor: PALETTE.danger,
     borderWidth: 1,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
   },
   signOutButtonText: {
-    color: '#DC2626',
+    color: PALETTE.danger,
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
 });

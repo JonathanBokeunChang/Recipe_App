@@ -9,17 +9,15 @@ import { Text, View } from '@/components/Themed';
 import { API_BASE_URL } from '@/constants/api';
 import { useAuth } from '@/components/auth';
 import { useQuiz } from '@/components/quiz-state';
-import { useColorScheme } from '@/components/useColorScheme';
 import { saveRecipeToLibrary } from '@/lib/recipe-library';
 import { useRecipeLibrary } from '@/lib/recipe-library-context';
 import { ConditionWarnings } from '@/components/ConditionWarnings';
 import { analyzeRecipeForConditions } from '@/lib/dietary-guardrails';
+import { PALETTE } from '@/constants/palette';
 
 const isWeb = Platform.OS === 'web';
 
 export default function UploadRecipeImageScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
-  const isDark = colorScheme === 'dark';
   const router = useRouter();
   const { user } = useAuth();
   const { quiz } = useQuiz();
@@ -307,8 +305,16 @@ export default function UploadRecipeImageScreen() {
           </Text>
         </View>
 
-        <View style={styles.card} lightColor="#FFFFFF" darkColor="#0B0F19">
-          <View style={styles.infoBox} lightColor="#F0F9FF" darkColor="#0B1224">
+        <View
+          style={styles.card}
+          lightColor={PALETTE.surface}
+          darkColor={PALETTE.surface}
+        >
+          <View
+            style={styles.infoBox}
+            lightColor={PALETTE.surfaceAlt}
+            darkColor={PALETTE.surfaceAlt}
+          >
             <Text style={styles.infoTitle}>Tip for clarity</Text>
             <Text style={styles.infoText}>
               Use a well-lit photo with the full page in frame. Include both the ingredient list and steps if possible.
@@ -325,12 +331,12 @@ export default function UploadRecipeImageScreen() {
           >
             {uploading ? (
               <>
-                <ActivityIndicator color={isDark ? '#111827' : '#F9FAFB'} />
+                <ActivityIndicator color={PALETTE.background} />
                 <Text style={styles.primaryButtonText}>Uploading...</Text>
               </>
             ) : processing ? (
               <>
-                <ActivityIndicator color={isDark ? '#111827' : '#F9FAFB'} />
+                <ActivityIndicator color={PALETTE.background} />
                 <Text style={styles.primaryButtonText}>Processing...</Text>
               </>
             ) : (
@@ -352,7 +358,11 @@ export default function UploadRecipeImageScreen() {
 
         {status === 'completed' && recipe ? (
           <>
-            <View style={styles.resultCard} lightColor="#F9FAFB" darkColor="#0B1224">
+            <View
+              style={styles.resultCard}
+              lightColor={PALETTE.surfaceAlt}
+              darkColor={PALETTE.surfaceAlt}
+            >
               <Text style={styles.resultTitle}>Recipe Draft</Text>
               <Text style={styles.resultSubtitle}>{recipe.title}</Text>
               <Text style={styles.resultBody}>
@@ -378,7 +388,7 @@ export default function UploadRecipeImageScreen() {
                   disabled={saveStatus === 'saving'}
                 >
                   {saveStatus === 'saving' ? (
-                    <ActivityIndicator color="#F9FAFB" />
+                    <ActivityIndicator color={PALETTE.text} />
                   ) : (
                     <Text style={styles.saveButtonText}>
                       {saveStatus === 'saved' ? 'Save again' : 'Save to library'}
@@ -440,7 +450,7 @@ export default function UploadRecipeImageScreen() {
                     disabled={isModifying}
                   >
                     {isModifying ? (
-                      <ActivityIndicator color="#F9FAFB" />
+                      <ActivityIndicator color="#1b1200" />
                     ) : (
                       <Text style={styles.modifyButtonText}>
                         Modify for {user.goal.replace('_', ' ')} goal
@@ -463,7 +473,11 @@ export default function UploadRecipeImageScreen() {
             </View>
 
             {modifiedRecipe ? (
-              <View style={styles.modifiedCard} lightColor="#ECFDF5" darkColor="#0B1F1A">
+              <View
+                style={styles.modifiedCard}
+                lightColor={PALETTE.surface}
+                darkColor={PALETTE.surface}
+              >
                 <Text style={styles.resultTitle}>
                   Optimized for {modifiedRecipe.goalType?.replace('_', ' ')}
                 </Text>
@@ -580,11 +594,13 @@ export default function UploadRecipeImageScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
+    backgroundColor: PALETTE.background,
   },
   container: {
     paddingHorizontal: 24,
     paddingTop: 24,
     paddingBottom: 40,
+    backgroundColor: PALETTE.background,
   },
   header: {
     gap: 10,
@@ -592,38 +608,42 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 26,
-    fontWeight: '700',
+    fontWeight: '800',
+    color: PALETTE.text,
   },
   subtitle: {
     fontSize: 14,
     lineHeight: 20,
-    opacity: 0.75,
+    color: PALETTE.mutedText,
   },
   card: {
     borderRadius: 18,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: PALETTE.border,
     gap: 16,
+    backgroundColor: PALETTE.surface,
   },
   infoBox: {
     borderRadius: 12,
     padding: 14,
     gap: 6,
+    borderWidth: 1,
+    borderColor: PALETTE.border,
+    backgroundColor: PALETTE.surfaceAlt,
   },
   infoTitle: {
     fontSize: 13,
-    fontWeight: '700',
-    color: '#0B5394',
+    fontWeight: '800',
+    color: PALETTE.accentCyan,
   },
   infoText: {
     fontSize: 12,
     lineHeight: 18,
-    color: '#0F172A',
-    opacity: 0.85,
+    color: PALETTE.mutedText,
   },
   primaryButton: {
-    backgroundColor: '#111827',
+    backgroundColor: PALETTE.accent,
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
@@ -635,39 +655,44 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   primaryButtonText: {
-    color: '#F9FAFB',
+    color: '#031305',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '800',
   },
   message: {
     fontSize: 13,
     lineHeight: 18,
     textAlign: 'center',
+    color: PALETTE.mutedText,
   },
   messageError: {
-    color: '#DC2626',
+    color: PALETTE.danger,
   },
   messageSuccess: {
-    color: '#059669',
+    color: PALETTE.accent,
   },
   resultCard: {
     marginTop: 16,
     borderRadius: 12,
     padding: 16,
     gap: 12,
+    borderWidth: 1,
+    borderColor: PALETTE.border,
+    backgroundColor: PALETTE.surfaceAlt,
   },
   resultTitle: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '800',
+    color: PALETTE.text,
   },
   resultSubtitle: {
     fontSize: 15,
-    fontWeight: '600',
-    opacity: 0.9,
+    fontWeight: '700',
+    color: PALETTE.text,
   },
   resultBody: {
     fontSize: 13,
-    opacity: 0.8,
+    color: PALETTE.mutedText,
   },
   section: {
     marginTop: 8,
@@ -675,7 +700,8 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '800',
+    color: PALETTE.text,
   },
   listRow: {
     flexDirection: 'row',
@@ -686,12 +712,12 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#4B5563',
+    backgroundColor: PALETTE.accent,
   },
   listText: {
     fontSize: 13,
     lineHeight: 18,
-    opacity: 0.9,
+    color: PALETTE.text,
     flex: 1,
   },
   stepRow: {
@@ -702,50 +728,52 @@ const styles = StyleSheet.create({
     width: 20,
     textAlign: 'center',
     fontWeight: '700',
-    color: '#111827',
+    color: PALETTE.accent,
   },
   stepText: {
     flex: 1,
     fontSize: 13,
     lineHeight: 20,
-    opacity: 0.95,
+    color: PALETTE.text,
   },
   saveButton: {
-    backgroundColor: '#111827',
+    backgroundColor: PALETTE.surfaceAlt,
+    borderWidth: 1,
+    borderColor: PALETTE.border,
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
     marginTop: 4,
   },
   saveButtonText: {
-    color: '#F9FAFB',
+    color: PALETTE.text,
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   saveMessage: {
     fontSize: 12,
     marginTop: 4,
-    opacity: 0.75,
+    color: PALETTE.mutedText,
   },
   saveMessageError: {
-    color: '#DC2626',
+    color: PALETTE.danger,
     opacity: 1,
   },
   modifyButton: {
-    backgroundColor: '#059669',
+    backgroundColor: PALETTE.accentSecondary,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
     marginTop: 8,
   },
   modifyButtonText: {
-    color: '#F9FAFB',
+    color: '#1b1200',
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   warningText: {
     fontSize: 12,
-    opacity: 0.7,
+    color: PALETTE.mutedText,
     fontStyle: 'italic',
     lineHeight: 18,
   },
@@ -754,11 +782,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     gap: 12,
+    borderWidth: 1,
+    borderColor: PALETTE.border,
+    backgroundColor: PALETTE.surface,
   },
   editCount: {
     fontSize: 13,
-    fontWeight: '600',
-    opacity: 0.7,
+    fontWeight: '700',
+    color: PALETTE.mutedText,
   },
   macroComparison: {
     flexDirection: 'row',
@@ -774,23 +805,26 @@ const styles = StyleSheet.create({
   macroLabel: {
     fontSize: 12,
     fontWeight: '700',
-    opacity: 0.6,
+    color: PALETTE.mutedText,
     marginBottom: 4,
   },
   macroValue: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
+    color: PALETTE.text,
   },
   macroArrow: {
     fontSize: 20,
     fontWeight: '700',
-    opacity: 0.5,
+    color: PALETTE.mutedText,
   },
   changeCard: {
-    backgroundColor: 'rgba(0,0,0,0.03)',
+    backgroundColor: PALETTE.surfaceAlt,
     padding: 12,
     borderRadius: 8,
     gap: 4,
+    borderWidth: 1,
+    borderColor: PALETTE.border,
   },
   editHeader: {
     flexDirection: 'row',
@@ -801,7 +835,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     textTransform: 'uppercase',
-    opacity: 0.6,
+    color: PALETTE.mutedText,
   },
   scoreRow: {
     flexDirection: 'row',
@@ -810,37 +844,38 @@ const styles = StyleSheet.create({
   scoreLabel: {
     fontSize: 10,
     fontWeight: '600',
-    opacity: 0.6,
+    color: PALETTE.mutedText,
   },
   changeDetail: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
+    color: PALETTE.text,
   },
   strikethrough: {
     textDecorationLine: 'line-through',
-    opacity: 0.5,
+    color: PALETTE.mutedText,
   },
   macroDelta: {
     fontSize: 11,
-    fontWeight: '600',
-    color: '#059669',
+    fontWeight: '700',
+    color: PALETTE.accent,
     marginTop: 4,
   },
   errorText: {
     fontSize: 13,
-    color: '#DC2626',
+    color: PALETTE.danger,
     marginTop: 8,
   },
   doneButton: {
-    backgroundColor: '#0EA5E9',
+    backgroundColor: PALETTE.accent,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
     marginTop: 16,
   },
   doneButtonText: {
-    color: '#F9FAFB',
+    color: '#031305',
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '800',
   },
 });

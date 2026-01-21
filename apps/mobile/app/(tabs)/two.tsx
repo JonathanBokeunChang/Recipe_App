@@ -19,6 +19,7 @@ import {
   type SavedRecipeSummary,
 } from '@/lib/recipe-library';
 import { useRecipeLibrary } from '@/lib/recipe-library-context';
+import { PALETTE } from '@/constants/palette';
 
 const log = (...args: any[]) => console.log('[Library]', ...args);
 
@@ -277,7 +278,11 @@ export default function TabTwoScreen() {
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
       {!loading && !recipes.length ? (
-        <View style={styles.emptyCard} lightColor="#FFFFFF" darkColor="#0B0F19">
+        <View
+          style={styles.emptyCard}
+          lightColor={PALETTE.surface}
+          darkColor={PALETTE.surface}
+        >
           <Text style={styles.emptyTitle}>No recipes yet</Text>
           <Text style={styles.emptyBody}>
             Save a recipe from the Paste Link flow to see it here.
@@ -311,14 +316,22 @@ export default function TabTwoScreen() {
       ))}
 
       {detailLoading ? (
-        <View style={styles.detailCard} lightColor="#FFFFFF" darkColor="#0B0F19">
+        <View
+          style={styles.detailCard}
+          lightColor={PALETTE.surface}
+          darkColor={PALETTE.surface}
+        >
           <ActivityIndicator />
           <Text style={styles.metaText}>Loading recipe…</Text>
         </View>
       ) : null}
 
       {selected && selectedDoc ? (
-        <View style={styles.detailCard} lightColor="#FFFFFF" darkColor="#0B0F19">
+        <View
+          style={styles.detailCard}
+          lightColor={PALETTE.surface}
+          darkColor={PALETTE.surface}
+        >
           <View style={styles.detailHeader}>
             <Text style={styles.detailTitle}>{selectedDoc.title ?? selected.title}</Text>
             <View style={styles.detailPill}>
@@ -455,6 +468,7 @@ export default function TabTwoScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: PALETTE.background,
   },
   content: {
     paddingHorizontal: 24,
@@ -464,43 +478,47 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 26,
-    fontWeight: '700',
+    fontWeight: '800',
+    color: PALETTE.text,
   },
   subtitle: {
     fontSize: 14,
     lineHeight: 20,
-    opacity: 0.8,
+    color: PALETTE.mutedText,
   },
   errorText: {
-    color: '#DC2626',
+    color: PALETTE.danger,
     fontSize: 13,
   },
   emptyCard: {
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: PALETTE.border,
+    backgroundColor: PALETTE.surface,
     gap: 8,
   },
   emptyTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '800',
+    color: PALETTE.text,
   },
   emptyBody: {
     fontSize: 14,
     lineHeight: 20,
-    opacity: 0.7,
+    color: PALETTE.mutedText,
   },
   recipeCard: {
     borderRadius: 14,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: PALETTE.border,
+    backgroundColor: PALETTE.surfaceAlt,
     gap: 8,
   },
   recipeCardActive: {
-    borderColor: '#111827',
-    backgroundColor: '#F9FAFB',
+    borderColor: PALETTE.accent,
+    backgroundColor: PALETTE.surface,
   },
   recipeHeader: {
     flexDirection: 'row',
@@ -508,35 +526,39 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   pill: {
-    backgroundColor: '#0F172A',
+    backgroundColor: PALETTE.surface,
+    borderWidth: 1,
+    borderColor: PALETTE.border,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 999,
   },
   pillText: {
-    color: '#F9FAFB',
+    color: PALETTE.accent,
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   dateText: {
     fontSize: 12,
-    opacity: 0.6,
+    color: PALETTE.mutedText,
   },
   recipeTitle: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '800',
+    color: PALETTE.text,
   },
   metaText: {
     fontSize: 13,
-    opacity: 0.75,
+    color: PALETTE.mutedText,
   },
   detailCard: {
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: PALETTE.border,
+    backgroundColor: PALETTE.surface,
     gap: 8,
   },
   detailHeader: {
@@ -545,21 +567,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   detailPill: {
-    backgroundColor: '#0F172A',
+    backgroundColor: PALETTE.surfaceAlt,
+    borderWidth: 1,
+    borderColor: PALETTE.border,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 999,
   },
   detailPillText: {
-    color: '#F9FAFB',
+    color: PALETTE.accent,
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   detailTitle: {
     fontSize: 17,
-    fontWeight: '700',
+    fontWeight: '800',
+    color: PALETTE.text,
   },
   metaRow: {
     flexDirection: 'row',
@@ -573,7 +598,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   deleteButton: {
-    backgroundColor: '#DC2626',
+    backgroundColor: PALETTE.danger,
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 12,
@@ -582,23 +607,24 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   deleteButtonText: {
-    color: '#F9FAFB',
-    fontWeight: '700',
+    color: '#fff',
+    fontWeight: '800',
     fontSize: 13,
   },
   divider: {
     height: 1,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: PALETTE.border,
     marginVertical: 10,
   },
   sectionHeader: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '800',
     marginTop: 4,
+    color: PALETTE.text,
   },
   macroLine: {
     fontSize: 13,
-    opacity: 0.8,
+    color: PALETTE.mutedText,
     marginTop: 2,
     marginBottom: 4,
   },
@@ -609,6 +635,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 13,
     fontWeight: '700',
+    color: PALETTE.text,
   },
   listRow: {
     flexDirection: 'row',
@@ -618,7 +645,7 @@ const styles = StyleSheet.create({
   bullet: {
     width: 6,
     height: 6,
-    backgroundColor: '#111827',
+    backgroundColor: PALETTE.accent,
     borderRadius: 999,
     marginTop: 7,
   },
@@ -626,6 +653,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     flex: 1,
+    color: PALETTE.text,
   },
   stepRow: {
     flexDirection: 'row',
@@ -637,8 +665,8 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: '#111827',
-    color: '#F9FAFB',
+    backgroundColor: PALETTE.accent,
+    color: '#031305',
     textAlign: 'center',
     fontWeight: '700',
     lineHeight: 22,
@@ -648,6 +676,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     flex: 1,
+    color: PALETTE.text,
   },
   chipRow: {
     flexDirection: 'row',
@@ -655,22 +684,25 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   chip: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: PALETTE.surfaceAlt,
+    borderWidth: 1,
+    borderColor: PALETTE.border,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 12,
   },
   chipText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
+    color: PALETTE.text,
   },
   chipSubtext: {
     fontSize: 11,
-    opacity: 0.7,
+    color: PALETTE.mutedText,
   },
   changeRow: {
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: PALETTE.border,
     borderRadius: 10,
     padding: 10,
     gap: 4,
@@ -684,19 +716,20 @@ const styles = StyleSheet.create({
   changeDetail: {
     fontSize: 13,
     lineHeight: 18,
+    color: PALETTE.text,
   },
   macroDelta: {
     fontSize: 12,
-    fontWeight: '600',
-    opacity: 0.8,
+    fontWeight: '700',
+    color: PALETTE.mutedText,
   },
   strikethrough: {
     textDecorationLine: 'line-through',
-    opacity: 0.7,
+    color: PALETTE.mutedText,
   },
   stepUpdateCard: {
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: PALETTE.border,
     borderRadius: 10,
     padding: 10,
     gap: 4,
@@ -704,15 +737,17 @@ const styles = StyleSheet.create({
   },
   stepUpdateNumber: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
+    color: PALETTE.text,
   },
   stepUpdateText: {
     fontSize: 13,
     lineHeight: 18,
+    color: PALETTE.text,
   },
   assumptionText: {
     fontSize: 13,
     lineHeight: 18,
-    opacity: 0.8,
+    color: PALETTE.mutedText,
   },
 });

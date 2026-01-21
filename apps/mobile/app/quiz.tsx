@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import { Text, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import { QuizState, useQuiz } from '@/components/quiz-state';
+import { PALETTE } from '@/constants/palette';
 
 type StepKey = 'profile' | 'body' | 'goal' | 'diet';
 
@@ -287,11 +288,15 @@ export default function QuizScreen() {
       >
         <View style={styles.topBar}>
           <Text style={styles.progressLabel}>Step {stepIndex + 1} of {steps.length}</Text>
-          <View style={styles.progressTrack} lightColor="#E5E7EB" darkColor="#0F172A">
+          <View
+            style={styles.progressTrack}
+            lightColor={PALETTE.mutedBorder}
+            darkColor={PALETTE.mutedBorder}
+          >
             <View
               style={[
                 styles.progressFill,
-                { width: `${progressPct}%`, backgroundColor: isDark ? '#34D399' : '#0F766E' },
+                { width: `${progressPct}%`, backgroundColor: PALETTE.accent },
               ]}
             />
           </View>
@@ -329,14 +334,8 @@ export default function QuizScreen() {
                 const num = parseInt(text, 10);
                 updateQuiz({ age: Number.isFinite(num) ? num : null });
               }}
-              style={[
-                styles.input,
-                {
-                  backgroundColor: isDark ? '#0F172A' : '#F3F4F6',
-                  color: isDark ? '#F9FAFB' : '#111827',
-                },
-              ]}
-              placeholderTextColor={isDark ? '#6B7280' : '#9CA3AF'}
+              style={styles.input}
+              placeholderTextColor={PALETTE.mutedText}
             />
             <Hint>Needed for metabolic estimates.</Hint>
           </Card>
@@ -361,14 +360,8 @@ export default function QuizScreen() {
                 keyboardType="number-pad"
                 value={quiz.heightCm ? String(quiz.heightCm) : ''}
                 onChangeText={setHeightCm}
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: isDark ? '#0F172A' : '#F3F4F6',
-                    color: isDark ? '#F9FAFB' : '#111827',
-                  },
-                ]}
-                placeholderTextColor={isDark ? '#6B7280' : '#9CA3AF'}
+                style={styles.input}
+                placeholderTextColor={PALETTE.mutedText}
               />
             ) : (
               <View style={styles.rowGap}>
@@ -380,12 +373,8 @@ export default function QuizScreen() {
                   style={[
                     styles.input,
                     styles.halfInput,
-                    {
-                      backgroundColor: isDark ? '#0F172A' : '#F3F4F6',
-                      color: isDark ? '#F9FAFB' : '#111827',
-                    },
                   ]}
-                  placeholderTextColor={isDark ? '#6B7280' : '#9CA3AF'}
+                  placeholderTextColor={PALETTE.mutedText}
                 />
                 <TextInput
                   placeholder="in"
@@ -395,12 +384,8 @@ export default function QuizScreen() {
                   style={[
                     styles.input,
                     styles.halfInput,
-                    {
-                      backgroundColor: isDark ? '#0F172A' : '#F3F4F6',
-                      color: isDark ? '#F9FAFB' : '#111827',
-                    },
                   ]}
-                  placeholderTextColor={isDark ? '#6B7280' : '#9CA3AF'}
+                  placeholderTextColor={PALETTE.mutedText}
                 />
               </View>
             )}
@@ -427,14 +412,8 @@ export default function QuizScreen() {
                   : ''
               }
               onChangeText={setWeightWithUnit}
-              style={[
-                styles.input,
-                {
-                  backgroundColor: isDark ? '#0F172A' : '#F3F4F6',
-                  color: isDark ? '#F9FAFB' : '#111827',
-                },
-              ]}
-              placeholderTextColor={isDark ? '#6B7280' : '#9CA3AF'}
+              style={styles.input}
+              placeholderTextColor={PALETTE.mutedText}
             />
             <TextInput
               placeholder={`Goal weight (${quiz.weightUnit}, optional)`}
@@ -447,14 +426,8 @@ export default function QuizScreen() {
                   : ''
               }
               onChangeText={setGoalWeightWithUnit}
-              style={[
-                styles.input,
-                {
-                  backgroundColor: isDark ? '#0F172A' : '#F3F4F6',
-                  color: isDark ? '#F9FAFB' : '#111827',
-                },
-              ]}
-              placeholderTextColor={isDark ? '#6B7280' : '#9CA3AF'}
+              style={styles.input}
+              placeholderTextColor={PALETTE.mutedText}
             />
           </Card>
         ) : null}
@@ -552,14 +525,8 @@ export default function QuizScreen() {
               placeholder="Add other exclusions (e.g., cilantro, mushrooms)"
               value={quiz.avoidList}
               onChangeText={(text) => updateQuiz({ avoidList: text })}
-              style={[
-                styles.input,
-                {
-                  backgroundColor: isDark ? '#0F172A' : '#F3F4F6',
-                  color: isDark ? '#F9FAFB' : '#111827',
-                },
-              ]}
-              placeholderTextColor={isDark ? '#6B7280' : '#9CA3AF'}
+              style={styles.input}
+              placeholderTextColor={PALETTE.mutedText}
               multiline
             />
             <Hint>We will never suggest ingredients you mark as allergens.</Hint>
@@ -567,7 +534,11 @@ export default function QuizScreen() {
         ) : null}
       </ScrollView>
 
-      <View style={styles.footer} lightColor="#FFFFFF" darkColor="#0A0F1A">
+      <View
+        style={styles.footer}
+        lightColor={PALETTE.surface}
+        darkColor={PALETTE.surface}
+      >
           <Pressable onPress={handleSkip} style={styles.skipButton} disabled={submitting}>
             <Text style={styles.skipText}>Skip for now</Text>
             <Text style={styles.skipSubtext}>You can finish later; accuracy may drop.</Text>
@@ -588,7 +559,6 @@ export default function QuizScreen() {
             disabled={!isStepValid || submitting}
             style={[
               styles.primaryButton,
-              { backgroundColor: isDark ? '#34D399' : '#0F766E' },
               (!isStepValid || submitting) && styles.primaryDisabled,
             ]}
           >
@@ -617,7 +587,11 @@ function Card({
   children: React.ReactNode;
 }) {
   return (
-    <View style={styles.card} lightColor="#FFFFFF" darkColor="#0B0F19">
+    <View
+      style={styles.card}
+      lightColor={PALETTE.surface}
+      darkColor={PALETTE.surface}
+    >
       <Text style={styles.cardTitle}>{title}</Text>
       <Text style={styles.cardReason}>{reason}</Text>
       <View style={styles.cardBody}>{children}</View>
@@ -652,11 +626,18 @@ function Chip({
       style={[
         styles.chip,
         selected
-          ? { backgroundColor: '#0F766E', borderColor: '#0F766E' }
-          : { backgroundColor: 'transparent', borderColor: '#CBD5E1' },
+          ? { backgroundColor: PALETTE.accent, borderColor: PALETTE.accent }
+          : { backgroundColor: PALETTE.surfaceAlt, borderColor: PALETTE.border },
       ]}
     >
-      <Text style={[styles.chipLabel, selected ? { color: '#F9FAFB' } : null]}>{label}</Text>
+      <Text
+        style={[
+          styles.chipLabel,
+          selected ? { color: '#031305' } : { color: PALETTE.text },
+        ]}
+      >
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -682,8 +663,8 @@ function OptionTile({
       style={[
         styles.optionTile,
         selected
-          ? { borderColor: '#0F766E', backgroundColor: '#ECFEFF' }
-          : { borderColor: '#E5E7EB' },
+          ? { borderColor: PALETTE.accent, backgroundColor: PALETTE.surface }
+          : { borderColor: PALETTE.border, backgroundColor: PALETTE.surfaceAlt },
       ]}
     >
       <Text style={styles.optionLabel}>{label}</Text>
@@ -695,9 +676,11 @@ function OptionTile({
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
+    backgroundColor: PALETTE.background,
   },
   flex: {
     flex: 1,
+    backgroundColor: PALETTE.background,
   },
   content: {
     paddingHorizontal: 20,
@@ -713,11 +696,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    color: PALETTE.mutedText,
   },
   progressTrack: {
     height: 8,
     borderRadius: 999,
     overflow: 'hidden',
+    backgroundColor: PALETTE.mutedBorder,
   },
   progressFill: {
     height: '100%',
@@ -725,23 +710,25 @@ const styles = StyleSheet.create({
   },
   reason: {
     fontSize: 14,
-    opacity: 0.75,
+    color: PALETTE.mutedText,
     lineHeight: 20,
   },
   card: {
     borderRadius: 18,
     padding: 18,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: PALETTE.border,
+    backgroundColor: PALETTE.surface,
     gap: 10,
   },
   cardTitle: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '800',
+    color: PALETTE.text,
   },
   cardReason: {
     fontSize: 14,
-    opacity: 0.75,
+    color: PALETTE.mutedText,
   },
   cardBody: {
     gap: 12,
@@ -749,6 +736,7 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontSize: 14,
     fontWeight: '700',
+    color: PALETTE.text,
   },
   input: {
     borderRadius: 12,
@@ -756,7 +744,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 15,
     borderWidth: 1,
-    borderColor: '#CBD5E1',
+    borderColor: PALETTE.border,
+    backgroundColor: PALETTE.surfaceAlt,
+    color: PALETTE.text,
   },
   rowGap: {
     flexDirection: 'row',
@@ -779,7 +769,7 @@ const styles = StyleSheet.create({
   chipLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#0F172A',
+    color: PALETTE.text,
   },
   optionGrid: {
     flexDirection: 'row',
@@ -795,12 +785,13 @@ const styles = StyleSheet.create({
   },
   optionLabel: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '800',
+    color: PALETTE.text,
   },
   optionNote: {
     fontSize: 13,
     lineHeight: 18,
-    opacity: 0.8,
+    color: PALETTE.mutedText,
   },
   paceRow: {
     flexDirection: 'row',
@@ -813,25 +804,26 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#CBD5E1',
+    borderColor: PALETTE.border,
   },
   paceDotActive: {
-    backgroundColor: '#ECFEFF',
-    borderColor: '#0F766E',
+    backgroundColor: PALETTE.surfaceAlt,
+    borderColor: PALETTE.accent,
   },
   paceDotLabel: {
     fontWeight: '700',
-    color: '#0F172A',
+    color: PALETTE.text,
   },
   hint: {
     fontSize: 13,
-    color: '#0F766E',
+    color: PALETTE.accent,
   },
   footer: {
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: PALETTE.border,
+    backgroundColor: PALETTE.surface,
     gap: 12,
   },
   navRow: {
@@ -842,7 +834,7 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#CBD5E1',
+    borderColor: PALETTE.border,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 14,
@@ -860,14 +852,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 14,
+    backgroundColor: PALETTE.accent,
   },
   primaryDisabled: {
     opacity: 0.5,
   },
   primaryLabel: {
     fontSize: 15,
-    fontWeight: '700',
-    color: '#F9FAFB',
+    fontWeight: '800',
+    color: '#031305',
   },
   skipButton: {
     alignItems: 'center',
@@ -876,14 +869,15 @@ const styles = StyleSheet.create({
   skipText: {
     fontSize: 14,
     fontWeight: '700',
+    color: PALETTE.text,
   },
   skipSubtext: {
     fontSize: 13,
-    opacity: 0.7,
+    color: PALETTE.mutedText,
   },
   skipWarning: {
     fontSize: 12,
-    color: '#DC2626',
+    color: PALETTE.danger,
     textAlign: 'center',
   },
 });

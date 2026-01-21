@@ -5,7 +5,6 @@ import { useRouter } from 'expo-router';
 
 import { Text, View } from '@/components/Themed';
 import { API_BASE_URL } from '@/constants/api';
-import { useColorScheme } from '@/components/useColorScheme';
 import { useAuth } from '@/components/auth';
 import { useQuiz } from '@/components/quiz-state';
 import { saveRecipeToLibrary } from '@/lib/recipe-library';
@@ -13,6 +12,7 @@ import { useRecipeLibrary } from '@/lib/recipe-library-context';
 import { logAuthState } from '@/supabaseClient';
 import { ConditionWarnings } from '@/components/ConditionWarnings';
 import { analyzeRecipeForConditions } from '@/lib/dietary-guardrails';
+import { PALETTE } from '@/constants/palette';
 
 type VideoSource = 'tiktok';
 
@@ -62,8 +62,6 @@ function parseVideoLink(input: string): ParseResult {
 }
 
 export default function PasteLinkScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
-  const isDark = colorScheme === 'dark';
   const router = useRouter();
   const { user } = useAuth();
   const { quiz } = useQuiz();
@@ -373,21 +371,19 @@ export default function PasteLinkScreen() {
           </Text>
         </View>
 
-        <View style={styles.card} lightColor="#FFFFFF" darkColor="#0B0F19">
+        <View
+          style={styles.card}
+          lightColor={PALETTE.surface}
+          darkColor={PALETTE.surface}
+        >
           <Text style={styles.label}>Video link</Text>
           <TextInput
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"
             placeholder="https://www.tiktok.com/@creator/video/123"
-            placeholderTextColor={isDark ? '#9CA3AF' : '#6B7280'}
-            style={[
-              styles.input,
-              {
-                backgroundColor: isDark ? '#0F172A' : '#F3F4F6',
-                color: isDark ? '#F9FAFB' : '#111827',
-              },
-            ]}
+            placeholderTextColor={PALETTE.mutedText}
+            style={styles.input}
             value={input}
             onChangeText={(text) => {
               setInput(text);
@@ -404,7 +400,11 @@ export default function PasteLinkScreen() {
 
           {provider && normalizedUrl ? (
             <View style={styles.preview}>
-              <View style={styles.badge} lightColor="#ECFEFF" darkColor="#0F172A">
+              <View
+                style={styles.badge}
+                lightColor={PALETTE.surfaceAlt}
+                darkColor={PALETTE.surfaceAlt}
+              >
                 <Text style={styles.badgeText}>TikTok</Text>
               </View>
               <Text style={styles.previewText}>{normalizedUrl}</Text>
@@ -423,16 +423,16 @@ export default function PasteLinkScreen() {
           ) : null}
 
           <Pressable
-            style={[styles.primaryButton, status === 'processing' && styles.primaryDisabled]}
-            onPress={submit}
-            disabled={status === 'processing'}
-          >
-            {status === 'processing' ? (
-              <ActivityIndicator color={isDark ? '#111827' : '#F9FAFB'} />
-            ) : (
-              <Text style={styles.primaryButtonText}>Start processing</Text>
-            )}
-          </Pressable>
+          style={[styles.primaryButton, status === 'processing' && styles.primaryDisabled]}
+          onPress={submit}
+          disabled={status === 'processing'}
+        >
+          {status === 'processing' ? (
+            <ActivityIndicator color={PALETTE.background} />
+          ) : (
+            <Text style={styles.primaryButtonText}>Start processing</Text>
+          )}
+        </Pressable>
         </View>
 
         {status === 'completed' && resultPreview ? (
@@ -440,7 +440,11 @@ export default function PasteLinkScreen() {
             {/* Show confidence warning if transcript-based extraction has low confidence */}
             {extractionMetadata?.transcriptBased &&
              extractionMetadata?.transcriptConfidence < 0.7 && (
-              <View style={styles.confidenceWarning} lightColor="#FEF3C7" darkColor="#78350F">
+              <View
+                style={styles.confidenceWarning}
+                lightColor={PALETTE.surfaceAlt}
+                darkColor={PALETTE.surfaceAlt}
+              >
                 <Text style={styles.confidenceWarningTitle}>Low Confidence Extraction</Text>
                 <Text style={styles.confidenceWarningText}>
                   This recipe was extracted from video captions (confidence: {Math.round(extractionMetadata.transcriptConfidence * 100)}%).
@@ -455,7 +459,11 @@ export default function PasteLinkScreen() {
               </View>
             )}
 
-            <View style={styles.resultCard} lightColor="#F9FAFB" darkColor="#0B1224">
+            <View
+              style={styles.resultCard}
+              lightColor={PALETTE.surfaceAlt}
+              darkColor={PALETTE.surfaceAlt}
+            >
               <Text style={styles.resultTitle}>Original Recipe</Text>
               <Text style={styles.resultSubtitle}>{resultPreview.title}</Text>
               <Text style={styles.resultBody}>
@@ -480,7 +488,7 @@ export default function PasteLinkScreen() {
                   disabled={saveStatus === 'saving'}
                 >
                   {saveStatus === 'saving' ? (
-                    <ActivityIndicator color="#F9FAFB" />
+                    <ActivityIndicator color={PALETTE.text} />
                   ) : (
                     <Text style={styles.saveButtonText}>
                       {saveStatus === 'saved' ? 'Save again' : 'Save to library'}
@@ -538,13 +546,13 @@ export default function PasteLinkScreen() {
                 <View style={styles.section}>
                   <Pressable
                     style={[styles.modifyButton, isModifying && styles.primaryDisabled]}
-                    onPress={modifyForGoal}
-                    disabled={isModifying}
-                  >
-                    {isModifying ? (
-                      <ActivityIndicator color="#F9FAFB" />
-                    ) : (
-                      <Text style={styles.modifyButtonText}>
+                  onPress={modifyForGoal}
+                  disabled={isModifying}
+                >
+                  {isModifying ? (
+                    <ActivityIndicator color="#1b1200" />
+                  ) : (
+                    <Text style={styles.modifyButtonText}>
                         Modify for {user.goal.replace('_', ' ')} goal
                       </Text>
                     )}
@@ -565,7 +573,11 @@ export default function PasteLinkScreen() {
             </View>
 
             {modifiedRecipe ? (
-              <View style={styles.resultCard} lightColor="#ECFDF5" darkColor="#0B1F1A">
+              <View
+                style={styles.resultCard}
+                lightColor={PALETTE.surface}
+                darkColor={PALETTE.surface}
+              >
                 <Text style={styles.resultTitle}>
                   Optimized for {modifiedRecipe.goalType.replace('_', ' ')}
                 </Text>
@@ -721,52 +733,63 @@ export default function PasteLinkScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
+    backgroundColor: PALETTE.background,
   },
   container: {
     flex: 1,
     paddingHorizontal: 24,
     paddingTop: 24,
+    backgroundColor: PALETTE.background,
   },
   header: {
     gap: 10,
   },
   title: {
     fontSize: 26,
-    fontWeight: '700',
+    fontWeight: '800',
+    color: PALETTE.text,
   },
   subtitle: {
     fontSize: 14,
     lineHeight: 20,
-    opacity: 0.75,
+    color: PALETTE.mutedText,
   },
   card: {
     marginTop: 24,
     borderRadius: 18,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: PALETTE.border,
+    backgroundColor: PALETTE.surface,
     gap: 12,
   },
   label: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
+    color: PALETTE.mutedText,
   },
   input: {
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
+    borderWidth: 1,
+    borderColor: PALETTE.border,
+    backgroundColor: PALETTE.surfaceAlt,
+    color: PALETTE.text,
   },
   secondaryButton: {
     borderWidth: 1,
-    borderColor: '#111827',
+    borderColor: PALETTE.border,
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
+    backgroundColor: PALETTE.surfaceAlt,
   },
   secondaryButtonText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
+    color: PALETTE.text,
   },
   preview: {
     gap: 6,
@@ -776,27 +799,32 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 4,
+    backgroundColor: PALETTE.surfaceAlt,
+    borderWidth: 1,
+    borderColor: PALETTE.border,
   },
   badgeText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
+    color: PALETTE.accent,
   },
   previewText: {
     fontSize: 12,
-    opacity: 0.7,
+    color: PALETTE.mutedText,
   },
   message: {
     fontSize: 13,
     lineHeight: 18,
+    color: PALETTE.mutedText,
   },
   messageError: {
-    color: '#DC2626',
+    color: PALETTE.danger,
   },
   messageSuccess: {
-    color: '#059669',
+    color: PALETTE.accent,
   },
   primaryButton: {
-    backgroundColor: '#111827',
+    backgroundColor: PALETTE.accent,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
@@ -806,83 +834,165 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   primaryButtonText: {
-    color: '#F9FAFB',
+    color: '#031305',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '800',
   },
   resultCard: {
     marginTop: 16,
     borderRadius: 12,
     padding: 14,
     gap: 10,
+    borderWidth: 1,
+    borderColor: PALETTE.border,
+    backgroundColor: PALETTE.surfaceAlt,
   },
   resultTitle: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '800',
+    color: PALETTE.text,
   },
   resultSubtitle: {
     fontSize: 15,
-    fontWeight: '600',
-    opacity: 0.9,
+    fontWeight: '700',
+    color: PALETTE.text,
   },
   editCount: {
     fontSize: 13,
-    fontWeight: '600',
-    opacity: 0.7,
+    fontWeight: '700',
+    color: PALETTE.mutedText,
   },
   resultBody: {
     fontSize: 13,
-    opacity: 0.8,
+    color: PALETTE.mutedText,
   },
   saveButton: {
-    backgroundColor: '#111827',
+    backgroundColor: PALETTE.surfaceAlt,
+    borderWidth: 1,
+    borderColor: PALETTE.border,
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
     marginTop: 4,
   },
   saveButtonText: {
-    color: '#F9FAFB',
+    color: PALETTE.text,
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   saveMessage: {
     fontSize: 12,
     marginTop: 4,
-    opacity: 0.75,
+    color: PALETTE.mutedText,
   },
   saveMessageError: {
-    color: '#DC2626',
+    color: PALETTE.danger,
     opacity: 1,
   },
   modifyButton: {
-    backgroundColor: '#059669',
+    backgroundColor: PALETTE.accentSecondary,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
     marginTop: 8,
   },
   modifyButtonText: {
-    color: '#F9FAFB',
+    color: '#1b1200',
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   warningText: {
     fontSize: 12,
-    opacity: 0.7,
+    color: PALETTE.mutedText,
     fontStyle: 'italic',
     lineHeight: 18,
   },
   errorText: {
     fontSize: 13,
-    color: '#DC2626',
+    color: PALETTE.danger,
     marginTop: 8,
+  },
+  confidenceWarning: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: PALETTE.border,
+    backgroundColor: PALETTE.surfaceAlt,
+    gap: 6,
+  },
+  confidenceWarningTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: PALETTE.accentSecondary,
+  },
+  confidenceWarningText: {
+    fontSize: 12,
+    color: PALETTE.mutedText,
+    lineHeight: 18,
+  },
+  uploadSuggestionButton: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: PALETTE.accent,
+  },
+  uploadSuggestionButtonText: {
+    color: '#031305',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  section: {
+    marginTop: 10,
+    gap: 8,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: PALETTE.text,
+  },
+  listRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'flex-start',
+  },
+  bullet: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: PALETTE.accent,
+    marginTop: 7,
+  },
+  listText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: PALETTE.text,
+    flex: 1,
+  },
+  stepRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'flex-start',
+  },
+  stepNumber: {
+    width: 20,
+    textAlign: 'center',
+    fontWeight: '700',
+    color: PALETTE.accent,
+  },
+  stepText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    color: PALETTE.text,
   },
   macroComparison: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: 12,
     marginTop: 8,
   },
   macroColumn: {
@@ -892,52 +1002,53 @@ const styles = StyleSheet.create({
   macroLabel: {
     fontSize: 12,
     fontWeight: '700',
-    opacity: 0.6,
-    marginBottom: 4,
+    color: PALETTE.mutedText,
   },
   macroValue: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
+    color: PALETTE.text,
   },
   macroArrow: {
     fontSize: 20,
     fontWeight: '700',
-    opacity: 0.5,
+    color: PALETTE.mutedText,
   },
-  reasoningText: {
+  driverCard: {
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: PALETTE.border,
+    backgroundColor: PALETTE.surfaceAlt,
+    marginTop: 4,
+  },
+  driverIngredient: {
     fontSize: 13,
-    lineHeight: 20,
-    opacity: 0.85,
+    fontWeight: '700',
+    color: PALETTE.text,
+  },
+  driverContribution: {
+    fontSize: 12,
+    color: PALETTE.mutedText,
   },
   changeCard: {
-    backgroundColor: 'rgba(0,0,0,0.03)',
     padding: 12,
-    borderRadius: 8,
-    gap: 4,
-  },
-  changeType: {
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    opacity: 0.6,
-  },
-  changeDetail: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  strikethrough: {
-    textDecorationLine: 'line-through',
-    opacity: 0.5,
-  },
-  changeReason: {
-    fontSize: 12,
-    opacity: 0.7,
-    lineHeight: 18,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: PALETTE.border,
+    backgroundColor: PALETTE.surfaceAlt,
+    gap: 6,
   },
   editHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  changeType: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    color: PALETTE.mutedText,
   },
   scoreRow: {
     flexDirection: 'row',
@@ -946,111 +1057,39 @@ const styles = StyleSheet.create({
   scoreLabel: {
     fontSize: 10,
     fontWeight: '600',
-    opacity: 0.6,
+    color: PALETTE.mutedText,
+  },
+  changeDetail: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: PALETTE.text,
+  },
+  strikethrough: {
+    textDecorationLine: 'line-through',
+    color: PALETTE.mutedText,
   },
   macroDelta: {
     fontSize: 11,
-    fontWeight: '600',
-    color: '#059669',
+    fontWeight: '700',
+    color: PALETTE.accent,
     marginTop: 4,
   },
-  driverCard: {
-    backgroundColor: 'rgba(0,0,0,0.02)',
-    padding: 10,
-    borderRadius: 8,
-    gap: 2,
-  },
-  driverIngredient: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  driverContribution: {
-    fontSize: 11,
-    opacity: 0.7,
-  },
   stepUpdateCard: {
-    backgroundColor: 'rgba(0,0,0,0.02)',
+    borderWidth: 1,
+    borderColor: PALETTE.border,
+    borderRadius: 10,
     padding: 10,
-    borderRadius: 8,
     gap: 4,
+    marginTop: 4,
   },
   stepUpdateNumber: {
-    fontSize: 11,
-    fontWeight: '700',
-    opacity: 0.6,
+    fontSize: 12,
+    fontWeight: '800',
+    color: PALETTE.text,
   },
   stepUpdateText: {
     fontSize: 13,
     lineHeight: 18,
-  },
-  section: {
-    marginTop: 8,
-    gap: 8,
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  listRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  bullet: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#4B5563',
-  },
-  listText: {
-    fontSize: 13,
-    lineHeight: 18,
-    opacity: 0.9,
-  },
-  stepRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  stepNumber: {
-    width: 20,
-    textAlign: 'center',
-    fontWeight: '700',
-    color: '#111827',
-  },
-  stepText: {
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 20,
-    opacity: 0.95,
-  },
-  confidenceWarning: {
-    marginTop: 16,
-    borderRadius: 12,
-    padding: 16,
-    gap: 10,
-    borderWidth: 1,
-    borderColor: '#F59E0B',
-  },
-  confidenceWarningTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#92400E',
-  },
-  confidenceWarningText: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: '#78350F',
-  },
-  uploadSuggestionButton: {
-    backgroundColor: '#F59E0B',
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  uploadSuggestionButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
+    color: PALETTE.text,
   },
 });

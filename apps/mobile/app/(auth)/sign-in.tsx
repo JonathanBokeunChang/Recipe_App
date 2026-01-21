@@ -10,15 +10,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Text, View } from '@/components/Themed';
-import { useColorScheme } from '@/components/useColorScheme';
 import { useAuth } from '@/components/auth';
+import { PALETTE } from '@/constants/palette';
 
 type FormMode = 'signIn' | 'signUp';
 
 export default function SignInScreen() {
   const { signInWithEmail, signUpWithEmail, signInWithGoogle, loading } = useAuth();
-  const colorScheme = useColorScheme() ?? 'light';
-  const isDark = colorScheme === 'dark';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -161,7 +159,11 @@ export default function SignInScreen() {
               </Text>
             </View>
 
-            <View style={styles.card} lightColor="#FFFFFF" darkColor="#0B0F19">
+            <View
+              style={styles.card}
+              lightColor={PALETTE.surface}
+              darkColor={PALETTE.surface}
+            >
               <Text style={styles.cardTitle}>
                 {mode === 'signIn' ? 'Sign in' : 'Create account'}
               </Text>
@@ -178,7 +180,7 @@ export default function SignInScreen() {
                   keyboardType="email-address"
                   textContentType="emailAddress"
                   placeholder="you@example.com"
-                  placeholderTextColor={isDark ? '#6B7280' : '#9CA3AF'}
+                  placeholderTextColor={PALETTE.mutedText}
                   value={email}
                   onChangeText={(text) => {
                     setEmail(text);
@@ -187,11 +189,7 @@ export default function SignInScreen() {
                   editable={!isSubmitting}
                   style={[
                     styles.input,
-                    {
-                      backgroundColor: isDark ? '#0F172A' : '#F3F4F6',
-                      color: isDark ? '#F9FAFB' : '#111827',
-                      opacity: isSubmitting ? 0.6 : 1,
-                    },
+                    { opacity: isSubmitting ? 0.6 : 1 },
                   ]}
                 />
               </View>
@@ -203,7 +201,7 @@ export default function SignInScreen() {
                   autoComplete={mode === 'signIn' ? 'current-password' : 'new-password'}
                   textContentType={mode === 'signIn' ? 'password' : 'newPassword'}
                   placeholder="At least 6 characters"
-                  placeholderTextColor={isDark ? '#6B7280' : '#9CA3AF'}
+                  placeholderTextColor={PALETTE.mutedText}
                   value={password}
                   onChangeText={(text) => {
                     setPassword(text);
@@ -213,11 +211,7 @@ export default function SignInScreen() {
                   editable={!isSubmitting}
                   style={[
                     styles.input,
-                    {
-                      backgroundColor: isDark ? '#0F172A' : '#F3F4F6',
-                      color: isDark ? '#F9FAFB' : '#111827',
-                      opacity: isSubmitting ? 0.6 : 1,
-                    },
+                    { opacity: isSubmitting ? 0.6 : 1 },
                   ]}
                 />
               </View>
@@ -226,20 +220,11 @@ export default function SignInScreen() {
               {message ? <Text style={styles.success}>{message}</Text> : null}
 
               <Pressable
-                style={[
-                  styles.primaryButton,
-                  { backgroundColor: isDark ? '#F9FAFB' : '#111827' },
-                  isButtonDisabled && styles.primaryDisabled,
-                ]}
+                style={[styles.primaryButton, isButtonDisabled && styles.primaryDisabled]}
                 onPress={submit}
                 disabled={isButtonDisabled}
               >
-                <Text
-                  style={[
-                    styles.primaryButtonText,
-                    { color: isDark ? '#111827' : '#F9FAFB' },
-                  ]}
-                >
+                <Text style={styles.primaryButtonText}>
                   {isSubmitting
                     ? 'Please wait...'
                     : mode === 'signIn'
@@ -261,29 +246,21 @@ export default function SignInScreen() {
               </Pressable>
 
               <View style={styles.divider}>
-                <View style={[styles.dividerLine, { backgroundColor: isDark ? '#374151' : '#E5E7EB' }]} />
-                <Text style={[styles.dividerText, { color: isDark ? '#9CA3AF' : '#6B7280' }]}>or</Text>
-                <View style={[styles.dividerLine, { backgroundColor: isDark ? '#374151' : '#E5E7EB' }]} />
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>or</Text>
+                <View style={styles.dividerLine} />
               </View>
 
               <Pressable
                 style={[
                   styles.googleButton,
-                  {
-                    backgroundColor: isDark ? '#1F2937' : '#FFFFFF',
-                    borderColor: isDark ? '#374151' : '#E5E7EB',
-                  },
+                  { backgroundColor: PALETTE.surfaceAlt },
                   (googleLoading || loading) && styles.buttonDisabled,
                 ]}
                 onPress={handleGoogleSignIn}
                 disabled={googleLoading || loading || isSubmitting}
               >
-                <Text
-                  style={[
-                    styles.googleButtonText,
-                    { color: isDark ? '#F9FAFB' : '#111827' },
-                  ]}
-                >
+                <Text style={styles.googleButtonText}>
                   {googleLoading ? 'Signing in...' : 'Continue with Google'}
                 </Text>
               </Pressable>
@@ -302,6 +279,7 @@ export default function SignInScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
+    backgroundColor: PALETTE.background,
   },
   keyboardView: {
     flex: 1,
@@ -315,6 +293,7 @@ const styles = StyleSheet.create({
     paddingTop: 32,
     paddingBottom: 40,
     justifyContent: 'space-between',
+    backgroundColor: PALETTE.background,
   },
   hero: {
     gap: 12,
@@ -324,39 +303,44 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 1,
+    color: PALETTE.accent,
   },
   title: {
     fontSize: 32,
-    fontWeight: '700',
+    fontWeight: '800',
     lineHeight: 38,
+    color: PALETTE.text,
   },
   subtitle: {
     fontSize: 16,
     lineHeight: 24,
-    opacity: 0.8,
+    color: PALETTE.mutedText,
   },
   card: {
     borderRadius: 18,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: PALETTE.border,
+    backgroundColor: PALETTE.surface,
     gap: 12,
   },
   cardTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '800',
+    color: PALETTE.text,
   },
   cardBody: {
     fontSize: 14,
     lineHeight: 20,
-    opacity: 0.8,
+    color: PALETTE.mutedText,
   },
   fieldGroup: {
     gap: 6,
   },
   label: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
+    color: PALETTE.mutedText,
   },
   input: {
     borderRadius: 12,
@@ -364,15 +348,17 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 15,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: PALETTE.border,
+    backgroundColor: PALETTE.surfaceAlt,
+    color: PALETTE.text,
   },
   error: {
-    color: '#DC2626',
+    color: PALETTE.danger,
     fontSize: 13,
     lineHeight: 18,
   },
   success: {
-    color: '#059669',
+    color: PALETTE.accent,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -381,13 +367,15 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     marginTop: 8,
+    backgroundColor: PALETTE.accent,
   },
   primaryDisabled: {
     opacity: 0.5,
   },
   primaryButtonText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '800',
+    color: '#031305',
   },
   switchButton: {
     alignItems: 'center',
@@ -395,11 +383,12 @@ const styles = StyleSheet.create({
   },
   switchText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
+    color: PALETTE.text,
   },
   helperText: {
     fontSize: 12,
-    opacity: 0.7,
+    color: PALETTE.mutedText,
     textAlign: 'center',
   },
   divider: {
@@ -410,20 +399,24 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
+    backgroundColor: PALETTE.border,
   },
   dividerText: {
     marginHorizontal: 16,
     fontSize: 14,
+    color: PALETTE.mutedText,
   },
   googleButton: {
     borderWidth: 1,
+    borderColor: PALETTE.border,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
   },
   googleButtonText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
+    color: PALETTE.text,
   },
   buttonDisabled: {
     opacity: 0.6,

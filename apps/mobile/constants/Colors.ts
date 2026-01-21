@@ -1,19 +1,24 @@
-const tintColorLight = '#2f95dc';
-const tintColorDark = '#fff';
+import { PALETTE } from './palette';
 
 export default {
   light: {
-    text: '#000',
-    background: '#fff',
-    tint: tintColorLight,
-    tabIconDefault: '#ccc',
-    tabIconSelected: tintColorLight,
+    text: PALETTE.text,
+    background: PALETTE.background,
+    tint: PALETTE.accent,
+    tabIconDefault: '#6b7280',
+    tabIconSelected: PALETTE.accent,
+    mutedText: PALETTE.mutedText,
+    surface: PALETTE.surface,
+    border: PALETTE.border,
   },
   dark: {
-    text: '#fff',
-    background: '#000',
-    tint: tintColorDark,
-    tabIconDefault: '#ccc',
-    tabIconSelected: tintColorDark,
+    text: PALETTE.text,
+    background: PALETTE.background,
+    tint: PALETTE.accent,
+    tabIconDefault: '#6b7280',
+    tabIconSelected: PALETTE.accent,
+    mutedText: PALETTE.mutedText,
+    surface: PALETTE.surface,
+    border: PALETTE.border,
   },
 };

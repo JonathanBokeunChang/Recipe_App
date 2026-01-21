@@ -13,12 +13,13 @@ import {
   formatGoalName,
   type CalculationResult,
 } from '@/lib/macro-calculator';
+import { PALETTE } from '@/constants/palette';
 
 const COLORS = {
-  calories: '#3B82F6',
-  protein: '#22C55E',
-  carbs: '#F97316',
-  fat: '#EAB308',
+  calories: PALETTE.accentCyan,
+  protein: PALETTE.accent,
+  carbs: PALETTE.accentSecondary,
+  fat: PALETTE.accentPink,
 };
 
 export default function MacrosScreen() {
@@ -40,7 +41,11 @@ export default function MacrosScreen() {
           Daily macro targets based on your profile and goals.
         </Text>
 
-        <View style={styles.incompleteCard} lightColor="#FFFFFF" darkColor="#0B0F19">
+        <View
+          style={styles.incompleteCard}
+          lightColor={PALETTE.surface}
+          darkColor={PALETTE.surface}
+        >
           <Text style={styles.incompleteTitle}>Complete Your Profile</Text>
           <Text style={styles.incompleteBody}>
             We need a bit more info to calculate your personalized macro targets.
@@ -95,7 +100,7 @@ export default function MacrosScreen() {
           size={200}
           strokeWidth={16}
           color={COLORS.calories}
-          backgroundColor="#E5E7EB"
+          backgroundColor={PALETTE.mutedBorder}
         >
           <Text style={styles.calorieConsumed}>{Math.round(consumed.calories)}</Text>
           <Text style={styles.calorieTarget}>/ {targets.calories} cal</Text>
@@ -110,7 +115,7 @@ export default function MacrosScreen() {
             size={90}
             strokeWidth={8}
             color={COLORS.protein}
-            backgroundColor="#E5E7EB"
+            backgroundColor={PALETTE.mutedBorder}
           >
             <Text style={styles.macroRingValue}>{Math.round(consumed.protein)}</Text>
           </CircularProgress>
@@ -124,7 +129,7 @@ export default function MacrosScreen() {
             size={90}
             strokeWidth={8}
             color={COLORS.carbs}
-            backgroundColor="#E5E7EB"
+            backgroundColor={PALETTE.mutedBorder}
           >
             <Text style={styles.macroRingValue}>{Math.round(consumed.carbs)}</Text>
           </CircularProgress>
@@ -138,7 +143,7 @@ export default function MacrosScreen() {
             size={90}
             strokeWidth={8}
             color={COLORS.fat}
-            backgroundColor="#E5E7EB"
+            backgroundColor={PALETTE.mutedBorder}
           >
             <Text style={styles.macroRingValue}>{Math.round(consumed.fat)}</Text>
           </CircularProgress>
@@ -158,7 +163,11 @@ export default function MacrosScreen() {
 
       {/* Today's Entries */}
       {today.entries.length > 0 && (
-        <View style={styles.entriesCard} lightColor="#FFFFFF" darkColor="#0B0F19">
+        <View
+          style={styles.entriesCard}
+          lightColor={PALETTE.surface}
+          darkColor={PALETTE.surface}
+        >
           <Text style={styles.entriesTitle}>Today's Entries</Text>
           {today.entries.map((entry) => (
             <View key={entry.id} style={styles.entryRow}>
@@ -180,7 +189,11 @@ export default function MacrosScreen() {
       )}
 
       {/* Calculation Details */}
-      <View style={styles.detailsCard} lightColor="#FFFFFF" darkColor="#0B0F19">
+      <View
+        style={styles.detailsCard}
+        lightColor={PALETTE.surface}
+        darkColor={PALETTE.surface}
+      >
         <Text style={styles.detailsTitle}>How we calculated this</Text>
 
         <View style={styles.detailRow}>
@@ -224,6 +237,7 @@ export default function MacrosScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: PALETTE.background,
   },
   content: {
     paddingHorizontal: 24,
@@ -233,42 +247,47 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 26,
-    fontWeight: '700',
+    fontWeight: '800',
+    color: PALETTE.text,
   },
   subtitle: {
     fontSize: 14,
     lineHeight: 20,
-    opacity: 0.8,
+    color: PALETTE.mutedText,
   },
   goalPill: {
-    backgroundColor: '#0F172A',
+    backgroundColor: PALETTE.surfaceAlt,
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 999,
     alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: PALETTE.border,
   },
   goalPillText: {
-    color: '#F9FAFB',
+    color: PALETTE.accent,
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '800',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
   },
   incompleteCard: {
     borderRadius: 16,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: PALETTE.border,
+    backgroundColor: PALETTE.surface,
     gap: 12,
   },
   incompleteTitle: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '800',
+    color: PALETTE.text,
   },
   incompleteBody: {
     fontSize: 14,
     lineHeight: 20,
-    opacity: 0.8,
+    color: PALETTE.mutedText,
   },
   missingList: {
     marginTop: 4,
@@ -276,16 +295,16 @@ const styles = StyleSheet.create({
   },
   missingLabel: {
     fontSize: 13,
-    fontWeight: '600',
-    opacity: 0.7,
+    fontWeight: '700',
+    color: PALETTE.mutedText,
   },
   missingItem: {
     fontSize: 14,
-    opacity: 0.8,
+    color: PALETTE.text,
     marginLeft: 4,
   },
   ctaButton: {
-    backgroundColor: '#0F172A',
+    backgroundColor: PALETTE.accent,
     paddingVertical: 14,
     paddingHorizontal: 24,
     borderRadius: 12,
@@ -293,9 +312,9 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   ctaButtonText: {
-    color: '#FFFFFF',
+    color: '#031305',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '800',
   },
   calorieRingContainer: {
     alignItems: 'center',
@@ -303,11 +322,12 @@ const styles = StyleSheet.create({
   },
   calorieConsumed: {
     fontSize: 36,
-    fontWeight: '700',
+    fontWeight: '800',
+    color: PALETTE.text,
   },
   calorieTarget: {
     fontSize: 14,
-    opacity: 0.6,
+    color: PALETTE.mutedText,
   },
   macroRingsRow: {
     flexDirection: 'row',
@@ -320,42 +340,47 @@ const styles = StyleSheet.create({
   },
   macroRingValue: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '800',
+    color: PALETTE.text,
   },
   macroRingTarget: {
     fontSize: 12,
-    opacity: 0.6,
+    color: PALETTE.mutedText,
   },
   macroRingLabel: {
     fontSize: 13,
-    fontWeight: '500',
-    opacity: 0.8,
+    fontWeight: '600',
+    color: PALETTE.mutedText,
   },
   addFoodButton: {
-    backgroundColor: '#0F172A',
+    backgroundColor: PALETTE.surfaceAlt,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
     paddingVertical: 14,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: PALETTE.border,
   },
   addFoodButtonText: {
-    color: '#FFFFFF',
+    color: PALETTE.text,
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   entriesCard: {
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: PALETTE.border,
+    backgroundColor: PALETTE.surface,
     gap: 12,
   },
   entriesTitle: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '800',
     marginBottom: 4,
+    color: PALETTE.text,
   },
   entryRow: {
     flexDirection: 'row',
@@ -368,11 +393,12 @@ const styles = StyleSheet.create({
   },
   entryLabel: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '700',
+    color: PALETTE.text,
   },
   entryMacros: {
     fontSize: 12,
-    opacity: 0.6,
+    color: PALETTE.mutedText,
   },
   deleteButton: {
     padding: 8,
@@ -381,13 +407,15 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: PALETTE.border,
+    backgroundColor: PALETTE.surface,
     gap: 12,
   },
   detailsTitle: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '800',
     marginBottom: 4,
+    color: PALETTE.text,
   },
   detailRow: {
     flexDirection: 'row',
@@ -396,11 +424,12 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     fontSize: 14,
-    opacity: 0.7,
+    color: PALETTE.mutedText,
   },
   detailValue: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
+    color: PALETTE.text,
   },
   updateLink: {
     alignItems: 'center',
@@ -408,7 +437,7 @@ const styles = StyleSheet.create({
   },
   updateLinkText: {
     fontSize: 15,
-    color: '#3B82F6',
-    fontWeight: '500',
+    color: PALETTE.accentCyan,
+    fontWeight: '700',
   },
 });

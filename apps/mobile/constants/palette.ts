@@ -1,0 +1,17 @@
+export const PALETTE = {
+  background: '#05070f',
+  surface: '#0c1220',
+  surfaceAlt: '#101a2d',
+  border: '#1c2c3d',
+  mutedBorder: '#12202f',
+  text: '#e9f7ec',
+  mutedText: '#93a5bf',
+  accent: '#6CFF6C',
+  accentSecondary: '#FFD166',
+  accentPink: '#ff66c4',
+  accentCyan: '#67e8f9',
+  danger: '#ff6b6b',
+  warning: '#fbbf24',
+  success: '#6CFF6C',
+  shadow: 'rgba(108, 255, 108, 0.15)',
+};
